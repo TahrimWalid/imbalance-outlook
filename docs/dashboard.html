@@ -762,7 +762,7 @@ body{margin:0;background:#07090C}
           <line v-if="ov.nowX != null" :x1="ov.nowX" :x2="ov.nowX" y1="-6" y2="300" :stroke="t.acc" stroke-width="1.5" vector-effect="non-scaling-stroke"></line>
           <line v-if="ov.hover" :x1="ov.hover.x" :x2="ov.hover.x" y1="0" y2="300" :stroke="t.text3" stroke-width="1" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"></line>
         </svg>
-        <span v-if="ov.nowLeft" class="lbl" :style="`position: absolute; top: -18px; left: ${ov.nowLeft}; transform: translateX(-50%); color: ${t.acc}; white-space: nowrap; font-weight: 600`">{{ov.nowLabel}}</span>
+        <span v-if="ov.nowLeft" class="lbl" :style="`position: absolute; top: 4px; left: ${ov.nowLeft}; margin-left: 6px; color: ${t.acc}; background: ${t.surf}; padding: 0 4px; white-space: nowrap; font-weight: 600`">{{ov.nowLabel}}</span>
         <span v-if="ov.clipped" class="m" :style="`position: absolute; top: 4px; right: 6px; font-size: 12px; color: ${t.text3}; background: ${t.surf}; padding: 0 4px`">▲ {{ov.clipped}}</span>
       </div>
     </div>
@@ -855,7 +855,8 @@ const pad = (n) => String(n).padStart(2, '0');
 const eur = (v) => { const r = Math.round(v); return (r < 0 ? '−' : '') + Math.abs(r).toLocaleString('en-US'); };
 const pct = (p) => Math.round(p * 100) + '%';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const YMAX = 400;
+const YMAX = 400, YMIN = -100;   // chart scale in €/MWh (negative prices are common)
+const yFrac = (v) => (clamp(v, YMIN, YMAX) - YMIN) / (YMAX - YMIN);
 const spark = (vals, lo, hi) => vals.map((v, i) => (i ? 'L' : 'M') + (i / (vals.length - 1) * 100).toFixed(2) + ' ' + (19 - clamp((v - lo) / ((hi - lo) || 1), 0, 1) * 18).toFixed(2)).join(' ');
 
 class Component extends View {
@@ -941,7 +942,7 @@ class Component extends View {
     this._fc.set(key, r);
     return r;
   }
-  y(v) { return 300 - clamp(v, 0, YMAX) / YMAX * 300; }
+  y(v) { return 300 - yFrac(v) * 300; }
 
   renderVals() {
     const st = this.state, scn = this.scn(), t = T;
@@ -990,7 +991,7 @@ class Component extends View {
       const sk = this.spk(p.m), hiS = sk === 1, loS = sk === -1;
       if (!((L.high && hiS) || (L.low && loS))) return;
       const caughtM = hiS ? p.hi > ALARM.high : p.lo > ALARM.low;
-      markers.push({ left: ((r + 0.5) / 64 * 100) + '%', bottom: (clamp(p.actual, 0, YMAX) / YMAX * 100) + '%', caught: caughtM, missed: !caughtM });
+      markers.push({ left: ((r + 0.5) / 64 * 100) + '%', bottom: (yFrac(p.actual) * 100) + '%', caught: caughtM, missed: !caughtM });
     });
     if (reveal) fut.forEach((p, k) => { if (p.actual > YMAX) offscale.push({ left: ((k + 24.5) / 64 * 100) + '%', label: eur(p.actual) + ' actual', c: t.act }); });
     steps.forEach((p, k) => { if (p.p90 > YMAX && k % 4 === 0) offscale.push({ left: ((k + 24.5) / 64 * 100) + '%', label: 'range to ' + eur(p.p90), c: t.fc }); });
@@ -1148,7 +1149,7 @@ class Component extends View {
     let tip = { on: false };
     if (st.hover != null && st.hover !== st.sel) {
       const h = slot(st.hover), x = (st.hover + 0.5) / 64 * 100, yv = h.isF ? h.p.p50 : (h.p.actual != null ? h.p.actual : h.p.p50);
-      const high = clamp(yv, 0, YMAX) / YMAX > 0.55;
+      const high = yFrac(yv) > 0.55;
       tip = { on: true, time: h.time, kind: h.kind, items: h.items.filter((it) => it.core).slice(0, 6), verdicts: h.verdicts.slice(0, 3), hasV: h.verdicts.length > 0,
         left: x + '%', tx: x > 62 ? 'translateX(calc(-100% - 14px))' : 'translateX(14px)', top: high ? 'auto' : '6px', bottom: high ? '6px' : 'auto' };
     }
@@ -1256,7 +1257,7 @@ class Component extends View {
       side: qv < 0 ? 'Short ' + Math.abs(qv) + ' MWh per quarter-hour: you buy the missing energy at the imbalance price.' : qv > 0 ? 'Long ' + qv + ' MWh per quarter-hour: you sell the surplus at the imbalance price.' : 'Balanced: nothing is settled at the imbalance price.',
       p50: money(e50), c: e50 < -500 ? t.watch : t.text, range: money(eLo) + ' to ' + money(eHi), horizon: hm(asOf) + '–' + hm(asOf + st.expoH * 60),
       tradable: money(e50 - eLock) + ' from ' + hm(asOf + GATE) + ' can still be hedged · ' + money(eLock) + ' is locked',
-      note: (dim ? 'Inputs are late, so treat these amounts with caution. ' : '') + 'Compared with settling the same energy at spot. The range adds the quarter-hour ranges, so it overstates the spread. In the build the volume comes from the balance plan.' };
+      note: (dim ? 'Inputs are late, so treat these amounts with caution. ' : '') + 'Compared with settling the same energy at spot. The range adds the quarter-hour ranges, so it overstates the spread.' };
 
     // live simulation scorecard: every quarter-hour since the start whose price is published, judged
     // against the latest forecast made before its delivery started (the run at the start of its hour)
@@ -1322,7 +1323,7 @@ class Component extends View {
       { name: 'Spikes', score: spikes ? caught + '/' + spikes + ' caught' + (falseAl ? ' · ' + falseAl + ' false' : '') : (falseAl ? falseAl + ' false alarms' : 'none, no alarms'), cells: spkC } ];
 
     // value labels on the best-guess line, one per hour
-    const valueLabels = L.vals && L.fc ? steps.filter((p, k) => k % 4 === 0 && p.p50 <= YMAX).map((p) => { const k = steps.indexOf(p); return { left: ((k + 24.5) / 64 * 100) + '%', bottom: (clamp(p.p50, 0, YMAX) / YMAX * 100) + '%', text: eur(p.p50) }; }) : [];
+    const valueLabels = L.vals && L.fc ? steps.filter((p, k) => k % 4 === 0 && p.p50 <= YMAX).map((p) => { const k = steps.indexOf(p); return { left: ((k + 24.5) / 64 * 100) + '%', bottom: (yFrac(p.p50) * 100) + '%', text: eur(p.p50) }; }) : [];
 
     // day navigator: actual per hour, only once it was known
     const wFrom = asOf - 360, wTo = asOf + 600;
@@ -1388,7 +1389,7 @@ class Component extends View {
     if (st.noteAt != null) evs.push({ m: st.noteAt, tag: 'Note', c: t.text2, text: 'Shift handover note updated' });
     const events = evs.sort((a, b) => b.m - a.m).slice(0, 5).map((e) => ({ ...e, time: hm(e.m) }));
 
-    const ytk = [0, 100, 200, 300, 400];
+    const ytk = [-100, 0, 100, 200, 300, 400];
 
     return {
       t, tzName, model: D.modelTag, dataTag: D.tag, notice: D.notice,
@@ -1410,7 +1411,7 @@ class Component extends View {
       offline, freshOpen: st.freshOpen, toggleFresh: () => this.setState((s) => ({ freshOpen: !s.freshOpen })), fresh, sources,
       isLocal: !utc, isUtc: utc, tzLocalBg: !utc ? t.surf2 : 'transparent', tzUtcBg: utc ? t.surf2 : 'transparent', tzLocal: () => this.setState({ tz: 'local' }), tzUtc: () => this.setState({ tz: 'utc' }),
       summary, trust, acc, kpis, ticker,
-      yTicks: ytk.map((v) => ({ pos: (v / YMAX * 100) + '%', label: v })), gridLines: [100, 200, 300].map((v) => ({ y: this.y(v) })),
+      yTicks: ytk.map((v) => ({ pos: (yFrac(v) * 100) + '%', label: v })), gridLines: [0, 100, 200, 300].map((v) => ({ y: this.y(v) })),
       xTicks: (() => { const off = ((60 - asOf % 60) % 60) / 15, out = []; for (let c = off; c <= 64; c += 4) out.push({ left: (c / 64 * 100) + '%', label: hm(start + 15 * c), c: c === 24 ? t.acc : t.text3, tx: c === 0 ? 'none' : c >= 64 ? 'translateX(-100%)' : 'translateX(-50%)' }); return out; })(),
       paths, offscale, shades: shadesOut, cells, ro, leave: () => this.setState({ hover: null, drag: null }),
       chartAria: 'Forecast of the imbalance price for ' + hm(asOf) + ' to ' + hm(asOf + 600) + ', with the last 6 hours of actual prices. Best guess ranges from ' + eur(pmin) + ' to ' + eur(pmax) + ' €/MWh.',
