@@ -88,7 +88,7 @@ body{margin:0;background:#07090C}
 
 <!-- Replay bar -->
 <template v-if="isPast">
-<div role="region" aria-label="Replay controls" :style="`display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 8px 24px; background: ${t.replayBg}; border-bottom: 1px solid ${t.acc}`">
+<div role="region" aria-label="Replay controls" :style="`position: sticky; top: 0; z-index: 20; box-shadow: 0 6px 18px rgba(0,0,0,0.45); display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 8px 24px; background: ${t.replayBg}; border-bottom: 1px solid ${t.acc}`">
   <span class="lbl" :style="`color: ${t.acc}; font-weight: 600`">● Replay</span>
   <span :style="`color: ${t.text2}; font-size: 13px`">Everything on screen is shown as it was known at <strong class="m" :style="`color: ${t.text}; font-weight: 600`">{{asOfLabel}}</strong></span>
   <div style="flex: 1 1 10px"></div>
@@ -104,7 +104,7 @@ body{margin:0;background:#07090C}
 
 <!-- Live simulation bar -->
 <template v-if="isSim">
-<div role="region" aria-label="Live simulation controls" :style="`display: flex; flex-direction: column; gap: 8px; padding: 10px 24px; background: ${t.replayBg}; border-bottom: 1px solid ${t.acc}`">
+<div role="region" aria-label="Live simulation controls" :style="`position: sticky; top: 0; z-index: 20; box-shadow: 0 6px 18px rgba(0,0,0,0.45); display: flex; flex-direction: column; gap: 8px; padding: 10px 24px; background: ${t.replayBg}; border-bottom: 1px solid ${t.acc}`">
   <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px">
     <span class="lbl" :style="`color: ${t.acc}; font-weight: 600`">▶ Live simulation</span>
     <span :style="`color: ${t.text2}; font-size: 13px; flex: 1 1 360px; min-width: 0`">{{sim.caption}}</span>
@@ -866,7 +866,7 @@ class Component extends View {
     const replay = scn === 'replay', simS = scn === 'simulation';
     this.state = { asOf: simS ? SIM.from : D.dayFirst * 1440 + 720, past: replay, playing: replay, speed: 1, reveal: replay, tz: 'local', sel: 43, hover: null, freshOpen: scn === 'stale', open: {}, trustOpen: false, roMore: false,
       layers: { ...LAYER_DEFAULT }, lead: 1, table: false, csvDone: false, main: 'combined_v3', cmp: 'A', tab: simS ? 'cr' : 'ov', ovFrom: D.dayFirst * 1440, ovTo: (D.dayLast + 1) * 1440, ovLead: 1, ovHover: null, ovSpot: false, hitsOpen: true, drag: null, brush: null,
-      sim: simS, simPlaying: simS, simSpeed: 4, pauseOnAlarm: true, simNote: '', analyst: false, ack: {}, snooze: {}, note: '', noteAt: null, pos: '-5', expoH: 4 };
+      sim: simS, simPlaying: simS, simSpeed: 4, pauseOnAlarm: false, simNote: '', analyst: false, ack: {}, snooze: {}, note: '', noteAt: null, pos: '-5', expoH: 4 };
   }
   componentDidMount() { this.sync(); }
   componentDidUpdate() { this.sync(); }
