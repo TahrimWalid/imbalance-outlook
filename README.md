@@ -10,7 +10,9 @@ limitation: Fingrid changed how the imbalance price is calculated on 1 June 2026
 only learn from four months of data. I implemented both of Fingrid's pricing rules, reproduced
 Fingrid's published price to within one cent in 99.6% of quarter-hours and re-priced 14 months of
 history under the new rule. Trained on that longer, consistent history, the forecast improved on all
-four official metrics (2.8% to 7.2%, each a clear difference), and now beats the baseline by 37% to 52%.
+four official metrics (2.8% to 7.2%, each a clear difference). On the unseen test month, an hour ahead,
+half of all quarter-hours land within €10/MWh of Fingrid's actual price, 86% inside the predicted range,
+and 78% of price spikes are flagged in advance.
 
 ## 1. The task
 
@@ -120,6 +122,32 @@ cannot decide the result.
   by about 3–7%", not a guaranteed gain everywhere. B's range is slightly narrower than it should be
   (76% of prices inside a range meant to hold 80%).
 - **Even with three models** B beats the frozen eight-model hackathon submission on every metric.
+
+### Against what actually happened: the unseen test month
+
+The test month (5 Oct – 1 Nov 2026) was never used for any choice: B was picked on the training folds
+and the validation month first. Scored afterwards against Fingrid's published prices:
+
+| Test month, official scorer | Official baseline | Hackathon submission (8 models) | **B (3 models)** |
+|---|---|---|---|
+| MAE of p50 (€/MWh) | 42.28 | 27.37 | **26.18** |
+| Mean pinball loss p10/p90 | 15.21 | 7.13 | **6.76** |
+| Brier, spikes | 0.0688 | 0.0595 | **0.0550** |
+| Brier, direction | 0.4253 | 0.4007 | **0.3950** |
+| p10–p90 coverage (target 0.80) | 0.80 | 0.90 | 0.85 |
+
+In plain terms, for the forecast made one hour ahead:
+
+- half of all quarter-hours land within **€10/MWh** of the actual price, 69% within €20 (prices swung
+  with a standard deviation of €70);
+- **86%** of actual prices fall inside the predicted range (aim 80%);
+- the direction of regulation (up, down or none) is right **74%** of the time;
+- **78%** of price spikes (more than €50 from the day-ahead price) are flagged an hour in advance, with
+  false alarms in 13% of quarter-hours.
+
+Over the full 10-hour horizon: 85% inside the range, direction right 71%, 63% of spikes flagged.
+
+![Unseen test month](docs/img/06_test_week.png)
 
 ## 5. From forecast to operator tool
 

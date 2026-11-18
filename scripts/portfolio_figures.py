@@ -269,13 +269,50 @@ def variants_chart(variants: list[str]):
     return save(fig, "05_variants_vs_A.png")
 
 
+
+# 6. the unseen test month: forecast one hour ahead against Fingrid's published price ------------------
+
+def test_week(variant: str = "B"):
+    f = pd.read_csv(ROOT / "runs" / "variants" / variant / "test_full" / "combined_v3" / "forecast_backtest.csv",
+                    parse_dates=["delivery_start_utc"])
+    f = f[f["step"] <= 4].set_index("delivery_start_utc")
+    a = pd.read_csv(ROOT / "data" / "actuals_test.csv", usecols=["delivery_start_utc", "imbalance_price"],
+                    parse_dates=["delivery_start_utc"]).set_index("delivery_start_utc")
+    t0 = pd.Timestamp("2026-10-05", tz=TZ).tz_convert("UTC")      # first full week, fixed in advance
+    g = pd.date_range(t0, t0 + pd.Timedelta(days=7) - pd.Timedelta(minutes=15), freq="15min")
+    f, a = f.reindex(g), a.reindex(g)
+    t = g.tz_convert(TZ)
+    top = 300
+    fig, ax = plt.subplots(figsize=(13, 4.8), facecolor=SURFACE)
+    style(ax)
+    ax.fill_between(t, f["p10"].clip(upper=top), f["p90"].clip(upper=top), step="post", color=FORECAST, alpha=0.18, lw=0, label="Likely range p10–p90")
+    ax.step(t, a["imbalance_price"].clip(upper=top), where="post", color=INK2, lw=1.1, label="Actual price (Fingrid)")
+    ax.step(t, f["p50"].clip(upper=top), where="post", color=FORECAST, lw=1.6, label="Forecast, made 1 h ahead")
+    over = a["imbalance_price"] > top
+    if over.any():
+        ax.text(0.995, 0.97, f"▲ actual above €{top}: {int(over.sum())} quarter-hours (highest €{a['imbalance_price'].max():,.0f})",
+                transform=ax.transAxes, ha="right", va="top", fontsize=8.5, color=INK2)
+    ax.set_ylim(top=top)
+    ax.xaxis.set_major_locator(mdates.DayLocator(tz=TZ))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %d %b", tz=TZ))
+    ax.set_ylabel("€/MWh", color=INK2)
+    ax.legend(loc="lower left", bbox_to_anchor=(0, 1.0), ncol=3, frameon=False, fontsize=9)
+    e = (a["imbalance_price"] - f["p50"]).abs()
+    inside = ((a["imbalance_price"] >= f["p10"]) & (a["imbalance_price"] <= f["p90"])).mean()
+    header(fig, "Unseen test month: forecast against what actually happened",
+           f"First week of the test month (5–11 Oct 2026, chosen in advance), never used for any choice. "
+           f"Average miss €{e.mean():.0f}/MWh, half within €{e.median():.0f}; {inside:.0%} of prices inside the range.")
+    credit(fig)
+    fig.tight_layout(rect=(0, 0.03, 1, 0.89))
+    return save(fig, "06_test_week.png")
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--variant", default=None, help="take the forecast and scores from runs/variants/<v>")
     ap.add_argument("--only", nargs="*", default=None)
     ap.add_argument("--compare", nargs="*", default=None, help="variants to chart against A")
     a = ap.parse_args()
-    want = set(a.only or ["rule", "score", "panels", "gif"])
+    want = set(a.only or ["rule", "score", "panels", "testweek"])
     if "rule" in want:
         rule_day()
     if "score" in want:
@@ -286,6 +323,8 @@ def main():
             ten_hour_panels(d)
         if "gif" in want:
             sim_gif(d)
+    if "testweek" in want:
+        test_week(a.variant or "B")
     if a.compare:
         variants_chart(a.compare)
 
