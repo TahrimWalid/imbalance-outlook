@@ -1,0 +1,1537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Imbalance Outlook</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07090C}
+.m{font-family:'JetBrains Mono',ui-monospace,monospace}
+.lbl{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;letter-spacing:0.08em;text-transform:uppercase}
+.hud{position:relative}
+.hud::before,.hud::after{content:"";position:absolute;width:9px;height:9px;border-color:#4A5462;border-style:solid;pointer-events:none}
+.hud::before{top:-1px;left:-1px;border-width:1px 0 0 1px}
+.hud::after{bottom:-1px;right:-1px;border-width:0 1px 1px 0}
+@keyframes pulse{0%,100%{opacity:0.55}50%{opacity:1}}
+@keyframes ping{0%{box-shadow:0 0 0 0 rgba(255,92,108,0.55)}100%{box-shadow:0 0 0 8px rgba(255,92,108,0)}}
+@keyframes tick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.pulse{animation:pulse 2.4s ease-in-out infinite}
+.ping{animation:ping 1.8s ease-out infinite}
+@media (prefers-reduced-motion: reduce){.pulse,.ping,.tick{animation:none}}
+</style>
+
+<script src="https://unpkg.com/vue@3.4.38/dist/vue.global.prod.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<script type="text/x-template" id="tpl">
+<div :style="`min-height: 1900px; background: ${t.bg}; color: ${t.text}; font-family: 'Inter', system-ui, sans-serif; font-size: 14px; line-height: 1.45; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased`">
+
+<!-- ============ TOP BAR ============ -->
+<header :style="`display: flex; flex-wrap: wrap; align-items: stretch; gap: 0; border-bottom: 1px solid ${t.border}; background: ${t.surf}`">
+  <div :style="`display: flex; align-items: center; gap: 10px; padding: 8px 18px; border-right: 1px solid ${t.border}`">
+    <span aria-hidden="true" :style="`width: 10px; height: 10px; background: ${t.acc}`"></span>
+    <span style="display: flex; flex-direction: column"><span class="m" style="font-weight: 600; font-size: 14px; letter-spacing: 0.06em">IMBALANCE OUTLOOK</span>
+    <span class="m" :style="`font-size: 12px; letter-spacing: 0.08em; color: ${t.text3}`">FI · {{dataTag}}</span></span>
+  </div>
+  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 8px 20px; flex: 1 1 600px">
+    <nav aria-label="Views" style="display: flex; gap: 2px"><button type="button" @click="setTabOv" class="lbl" :style="`border: 0; background: none; cursor: pointer; color: ${tabOvFg}; border-bottom: 2px solid ${tabOvLine}; padding: 6px 10px`">Overview</button><button type="button" @click="setTabCr" class="lbl" :style="`border: 0; background: none; cursor: pointer; color: ${tabCrFg}; border-bottom: 2px solid ${tabCrLine}; padding: 6px 10px`">Control room</button></nav>
+    <div style="flex: 1 1 20px"></div>
+
+    <div role="group" aria-label="Point of review" style="display: flex; align-items: center; gap: 6px">
+      <span class="lbl" :style="`color: ${t.text3}`">As of</span>
+      <select @change="pickDay" aria-label="Day" class="m" :style="`height: 32px; border: 1px solid ${t.border}; background: ${t.bg}; color: ${t.text}; font-size: 12px`"><template v-for="d in dayOpts"><option :value="d.v" :selected="d.on">{{d.label}}</option></template></select>
+      <button type="button" @click="back" aria-label="One hour back" aria-keyshortcuts="ArrowLeft" :style="`width: 32px; height: 32px; border: 1px solid ${t.border}; background: ${t.surf2}; color: ${t.text}; cursor: pointer; font-size: 12px`">◀</button>
+      <div class="m" :style="`min-width: 158px; height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid ${asOfBorder}; padding: 0 10px; font-size: 13px; background: ${t.bg}`">
+        <span>{{asOfLabel}}</span><span :style="`color: ${t.text3}; font-size: 12px`">{{tzName}}</span>
+      </div>
+      <button type="button" @click="fwd" :disabled="fwdDisabled" aria-label="One hour forward" aria-keyshortcuts="ArrowRight" :style="`width: 32px; height: 32px; border: 1px solid ${t.border}; background: ${t.surf2}; color: ${fwdColor}; cursor: pointer; font-size: 12px`">▶</button>
+      <div role="group" aria-label="Mode" :style="`display: flex; border: 1px solid ${t.border}; margin-left: 4px`">
+        <button type="button" @click="goLive" :aria-pressed="isLive" class="lbl" :style="`height: 30px; padding: 0 12px; border: 0; background: ${liveBg}; color: ${liveFg}; cursor: pointer; display: flex; align-items: center; gap: 6px`"><span aria-hidden="true" :class="liveCls" :style="`width: 7px; height: 7px; border-radius: 50%; background: ${liveDot}`"></span>Browse</button>
+        <button type="button" @click="goReplay" :aria-pressed="isPast" class="lbl" :style="`height: 30px; padding: 0 12px; border: 0; border-left: 1px solid ${t.border}; background: ${replayBg}; color: ${replayFg}; cursor: pointer`">Replay</button>
+        <button type="button" @click="goSim" :aria-pressed="isSim" class="lbl" :style="`height: 30px; padding: 0 12px; border: 0; border-left: 1px solid ${t.border}; background: ${simBg}; color: ${simFg}; cursor: pointer; display: flex; align-items: center; gap: 6px`"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 1 L9 5 L2 9 Z" fill="currentColor"></path></svg>Live simulation</button>
+      </div>
+    </div>
+
+    <button type="button" @click="toggleFresh" :aria-expanded="freshOpen" class="lbl" :style="`height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid ${fresh.border}; background: ${fresh.bg}; color: ${fresh.fg}; cursor: pointer`">
+      <template v-if="fresh.isOk"><svg width="13" height="13" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 7.5 L5.5 10.5 L11.5 3.5"></path></svg></template>
+      <template v-if="fresh.isBad"><svg width="13" height="13" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5.5"></circle><path d="M7 4 V7.5 L9 9"></path></svg></template>
+      <span>{{fresh.label}}</span>
+    </button>
+
+    <div role="group" aria-label="Time zone" :style="`display: flex; border: 1px solid ${t.border}`">
+      <button type="button" @click="tzLocal" :aria-pressed="isLocal" class="lbl" :style="`height: 30px; padding: 0 10px; border: 0; background: ${tzLocalBg}; color: ${t.text}; cursor: pointer`">FI</button>
+      <button type="button" @click="tzUtc" :aria-pressed="isUtc" class="lbl" :style="`height: 30px; padding: 0 10px; border: 0; border-left: 1px solid ${t.border}; background: ${tzUtcBg}; color: ${t.text}; cursor: pointer`">UTC</button>
+    </div>
+  </div>
+</header>
+
+<template v-if="tab === 'cr'">
+<!-- Freshness dropdown -->
+<template v-if="freshOpen">
+<div style="position: relative; height: 0; z-index: 5">
+  <div role="region" aria-label="Data freshness per source" :style="`position: absolute; right: 90px; top: 6px; width: 540px; background: ${t.surf}; border: 1px solid ${t.border}; box-shadow: ${t.shadow}; padding: 14px 16px`">
+    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px"><strong class="lbl" :style="`font-weight: 600; color: ${t.text}`">Data freshness</strong><span class="m" :style="`font-size: 12px; color: ${t.text3}`">as known at {{asOfShort}}</span></div>
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px">
+      <thead><tr class="lbl" :style="`color: ${t.text3}; text-align: left`"><th style="font-weight: 500; padding: 4px 0">Source</th><th style="font-weight: 500">Latest</th><th style="font-weight: 500; text-align: right">Age</th><th style="font-weight: 500; text-align: right">Expected</th><th style="font-weight: 500; text-align: right">Status</th></tr></thead>
+      <tbody>
+        <template v-for="s in sources">
+        <tr :style="`border-top: 1px solid ${t.grid}`"><td style="padding: 6px 0">{{s.source}}</td><td class="m" :style="`font-size: 12px; color: ${t.text2}`">{{s.latest}}</td><td class="m" style="text-align: right">{{s.age}}</td><td class="m" :style="`text-align: right; color: ${t.text3}`">{{s.expected}}</td><td :style="`text-align: right; color: ${s.color}; font-weight: 500`">{{s.statusLabel}}</td></tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</div>
+</template>
+
+<!-- Replay bar -->
+<template v-if="isPast">
+<div role="region" aria-label="Replay controls" :style="`display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 8px 24px; background: ${t.replayBg}; border-bottom: 1px solid ${t.acc}`">
+  <span class="lbl" :style="`color: ${t.acc}; font-weight: 600`">● Replay</span>
+  <span :style="`color: ${t.text2}; font-size: 13px`">Everything on screen is shown as it was known at <strong class="m" :style="`color: ${t.text}; font-weight: 600`">{{asOfLabel}}</strong></span>
+  <div style="flex: 1 1 10px"></div>
+  <button type="button" @click="togglePlay" :aria-label="playLabel" class="lbl" :style="`height: 30px; min-width: 84px; padding: 0 12px; border: 1px solid ${t.border}; background: ${t.surf}; color: ${t.text}; cursor: pointer`">{{playText}}</button>
+  <div role="group" aria-label="Replay speed" :style="`display: flex; border: 1px solid ${t.border}`">
+    <template v-for="sp in speeds">
+      <button type="button" @click="sp.pick" :aria-pressed="sp.on" class="m" :style="`height: 28px; padding: 0 10px; border: 0; background: ${sp.bg}; color: ${t.text}; cursor: pointer; font-size: 12px`">{{sp.label}}</button>
+    </template>
+  </div>
+  <label :style="`display: flex; align-items: center; gap: 6px; font-size: 13px; color: ${t.text2}; cursor: pointer`"><input type="checkbox" :checked="reveal" @change="toggleReveal" :style="`accent-color: ${t.acc}`">Reveal what actually happened</label>
+</div>
+</template>
+
+<!-- Live simulation bar -->
+<template v-if="isSim">
+<div role="region" aria-label="Live simulation controls" :style="`display: flex; flex-direction: column; gap: 8px; padding: 10px 24px; background: ${t.replayBg}; border-bottom: 1px solid ${t.acc}`">
+  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px">
+    <span class="lbl" :style="`color: ${t.acc}; font-weight: 600`">▶ Live simulation</span>
+    <span :style="`color: ${t.text2}; font-size: 13px; flex: 1 1 360px; min-width: 0`">{{sim.caption}}</span>
+    <div role="group" aria-label="Playback" style="display: flex; gap: 4px">
+      <button type="button" @click="sim.restart" aria-label="Restart the day" class="m" :style="`width: 36px; height: 32px; border: 1px solid ${t.border}; background: ${t.surf}; color: ${t.text}; cursor: pointer; font-size: 12px`">|◀</button>
+      <button type="button" @click="sim.back15" aria-label="15 minutes back" class="m" :style="`width: 36px; height: 32px; border: 1px solid ${t.border}; background: ${t.surf}; color: ${t.text}; cursor: pointer; font-size: 14px`">‹</button>
+      <button type="button" @click="sim.play" :aria-label="sim.playLabel" class="lbl" :style="`height: 32px; min-width: 112px; padding: 0 12px; border: 1px solid ${t.acc}; background: ${t.surf}; color: ${t.text}; cursor: pointer`">{{sim.playText}}</button>
+      <button type="button" @click="sim.fwd15" aria-label="15 minutes forward" class="m" :style="`width: 36px; height: 32px; border: 1px solid ${t.border}; background: ${t.surf}; color: ${t.text}; cursor: pointer; font-size: 14px`">›</button>
+    </div>
+    <div role="group" aria-label="Simulation speed" :style="`display: flex; border: 1px solid ${t.border}`">
+      <template v-for="sp in sim.speeds"><button type="button" @click="sp.pick" :aria-pressed="sp.on" class="m" :style="`height: 30px; padding: 0 10px; border: 0; background: ${sp.bg}; color: ${t.text}; cursor: pointer; font-size: 12px`">{{sp.label}}</button></template>
+    </div>
+    <label :style="`display: flex; align-items: center; gap: 6px; font-size: 13px; color: ${t.text2}; cursor: pointer`"><input type="checkbox" :checked="sim.pauseOnAlarm" @change="sim.togglePause" :style="`accent-color: ${t.acc}`">Pause on a new or rising alarm</label>
+  </div>
+  <div style="display: flex; align-items: center; gap: 10px">
+    <span class="m" :style="`font-size: 12px; color: ${t.text3}`">{{sim.fromLabel}}</span>
+    <input type="range" :min="sim.min" :max="sim.max" step="15" :value="sim.clock" @input="sim.scrub" aria-label="Simulation clock" :aria-valuetext="sim.clockLabel" :style="`flex: 1; min-width: 0; accent-color: ${t.acc}`">
+    <span class="m" :style="`font-size: 12px; color: ${t.text3}`">{{sim.toLabel}}</span>
+  </div>
+  <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 20px; font-size: 13px">
+    <span class="lbl" :style="`color: ${t.text3}`">Scorecard since {{sim.fromLabel}}</span>
+    <template v-for="sc in sim.score"><span><span :style="`color: ${t.text3}`">{{sc.k}}</span> <strong class="m" :style="`font-weight: 600; color: ${sc.c}`">{{sc.v}}</strong></span></template>
+  </div>
+  <template v-if="sim.hasNote"><div role="status" :style="`font-size: 13px; font-weight: 600; color: ${t.rev}`">{{sim.note}}</div></template>
+</div>
+</template>
+
+<!-- Offline banner -->
+<template v-if="offline">
+<div role="alert" :style="`display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 24px; background: ${t.watch}; color: #07090C`">
+  <strong style="font-weight: 600">Can't reach the forecast service since 12:03.</strong>
+  <span>You are looking at the 12:00 forecast. Hindsight and replay still work from the last download.</span>
+</div>
+</template>
+
+<main style="max-width: 1720px; margin: 0 auto; padding: 16px 24px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">
+
+  <!-- ============ KPI STRIP ============ -->
+  <section aria-label="Key numbers" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px">
+    <template v-for="k in kpis">
+      <div class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 10px 14px 8px; display: flex; flex-direction: column; gap: 2px; min-width: 0`">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px">
+          <span class="lbl" :style="`color: ${t.text3}`">{{k.label}}</span>
+          <template v-if="k.alarm"><span aria-hidden="true" class="ping" :style="`width: 8px; height: 8px; border-radius: 50%; background: ${t.rev}`"></span></template>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 6px; min-width: 0">
+          <span class="m" :style="`font-size: 26px; font-weight: 600; line-height: 1.15; color: ${k.c}; white-space: nowrap`">{{k.value}}</span>
+          <span class="m" :style="`font-size: 12px; color: ${t.text3}`">{{k.unit}}</span>
+        </div>
+        <span :style="`font-size: 12px; color: ${t.text2}; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden`">{{k.sub}}</span>
+        <template v-if="k.rangeOn">
+          <div role="img" :aria-label="k.rangeAria" :style="`position: relative; height: 10px; margin-top: 6px; background: ${t.grid}`">
+            <span :style="`position: absolute; top: 0; bottom: 0; left: ${k.bandL}; width: ${k.bandW}; background: ${t.border}`"></span>
+            <span :style="`position: absolute; top: -3px; bottom: -3px; left: ${k.markL}; width: 3px; transform: translateX(-50%); background: ${k.markC}`"></span>
+          </div>
+          <span class="m" :style="`font-size: 12px; color: ${k.rangeC}; margin-top: 2px`">{{k.rangeLabel}}</span>
+        </template>
+      </div>
+    </template>
+  </section>
+
+  <!-- ============ SITUATION ============ -->
+  <section aria-label="Situation summary" class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 12px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px`">
+    <span class="m" :style="`font-size: 12px; font-weight: 600; background: ${t.surf2}; color: ${t.text2}; border: 1px solid ${t.border}; padding: 0 5px`">00</span>
+    <span class="lbl" :style="`color: ${t.text3}`">Situation · {{horizonLabel}}</span>
+    <h1 style="margin: 0; flex: 1 1 600px; font-size: 20px; line-height: 1.35; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance">{{summary}}</h1>
+  </section>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start">
+
+  <!-- ============ LEFT: CHARTS + DETAIL ============ -->
+  <div style="flex: 999 1 720px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+  <section aria-label="Price forecast, next 10 hours" class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 12px 16px 12px`">
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; margin-bottom: 10px">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span class="m" :style="`font-size: 12px; font-weight: 600; background: ${t.surf2}; color: ${t.text2}; border: 1px solid ${t.border}; padding: 0 5px`">01</span>
+        <h2 class="lbl" :style="`margin: 0; font-weight: 600; color: ${t.text}`">Imbalance price · next 10 h</h2>
+        <span class="m" :style="`font-size: 12px; color: ${t.text3}`">€/MWh · 15 min</span>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+        <template v-if="analyst">
+        <div role="group" aria-label="Past side: forecasts made this long before delivery" style="display: flex; align-items: center; gap: 6px">
+          <span class="lbl" :style="`color: ${t.text3}`">Past side as forecast</span>
+          <div :style="`display: flex; border: 1px solid ${t.border}`">
+            <template v-for="l in leads">
+              <button type="button" @click="l.pick" :aria-pressed="l.on" class="m" :style="`height: 26px; padding: 0 9px; border: 0; border-left: 1px solid ${l.sep}; background: ${l.bg}; color: ${l.fg}; cursor: pointer; font-size: 12px`">{{l.label}}</button>
+            </template>
+          </div>
+          <span class="lbl" :style="`color: ${t.text3}`">ahead</span>
+        </div>
+        <label class="lbl" :style="`display: flex; align-items: center; gap: 6px; color: ${t.text3}`">Model
+          <select @change="pickMainEv" class="m" :style="`height: 26px; border: 1px solid ${t.border}; background: ${t.bg}; color: ${t.text}; font-size: 12px; text-transform: none; letter-spacing: 0`">
+            <template v-for="o in models"><option :value="o.id" :selected="o.on">{{o.label}}</option></template>
+          </select>
+        </label>
+        <label class="lbl" :style="`display: flex; align-items: center; gap: 6px; color: ${t.text3}`">Compare
+          <select @change="pickCmpEv" class="m" :style="`height: 26px; border: 1px solid ${t.border}; background: ${t.bg}; color: ${t.text}; font-size: 12px; text-transform: none; letter-spacing: 0`">
+            <template v-for="o in cmpModels"><option :value="o.id" :selected="o.on">{{o.label}}</option></template>
+          </select>
+        </label>
+        <button type="button" @click="toggleTable" :aria-pressed="tableOn" class="lbl" :style="`height: 26px; padding: 0 10px; border: 1px solid ${t.border}; background: ${tableBg}; color: ${t.text2}; cursor: pointer`">Table</button>
+        <button type="button" @click="exportCsv" class="lbl" :style="`height: 26px; padding: 0 10px; border: 1px solid ${t.border}; background: transparent; color: ${t.text2}; cursor: pointer`">{{csvLabel}}</button>
+        </template>
+        <button type="button" @click="toggleAnalyst" :aria-expanded="analyst" class="lbl" :style="`height: 28px; padding: 0 10px; border: 1px solid ${t.border}; background: ${analystBg}; color: ${t.text2}; cursor: pointer`">{{analystLabel}}</button>
+      </div>
+    </div>
+
+    <!-- Layer chips: the legend is the toggle -->
+    <div role="group" aria-label="Chart layers" style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px">
+      <template v-for="ch in chips">
+        <button type="button" @click="ch.toggle" :aria-pressed="ch.on" :style="`height: 28px; display: flex; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid ${ch.border}; background: ${ch.bg}; color: ${ch.fg}; cursor: pointer; font: inherit; font-size: 12px`">
+          <span aria-hidden="true" :style="`width: 16px; height: ${ch.swH}; background: ${ch.swBg}; border-top: ${ch.swLine}; opacity: ${ch.swOp}`"></span>{{ch.label}}
+        </button>
+      </template>
+      <template v-if="analyst">
+      <span aria-hidden="true" :style="`width: 1px; height: 18px; background: ${t.border}; margin: 0 4px`"></span>
+      <button type="button" @click="presetSimple" class="lbl" :style="`height: 28px; padding: 0 10px; border: 1px dashed ${t.border}; background: transparent; color: ${t.text2}; cursor: pointer`">Simple</button>
+      <button type="button" @click="presetAll" class="lbl" :style="`height: 28px; padding: 0 10px; border: 1px dashed ${t.border}; background: transparent; color: ${t.text2}; cursor: pointer`">Everything</button>
+      </template>
+    </div>
+
+    <!-- Readout -->
+    <div aria-live="polite" :style="`display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: baseline; min-height: 36px; padding: 7px 12px; background: ${t.bg}; border: 1px solid ${t.grid}; margin-bottom: 10px; font-size: 13px`">
+      <strong class="m" :style="`font-weight: 600; font-size: 13px; color: ${t.text}`">{{ro.time}}</strong>
+      <span class="lbl" :style="`color: ${t.text3}`">{{ro.kind}} · click to pin, drag to select a window</span>
+      <template v-for="it in ro.shown">
+        <span><span :style="`color: ${t.text3}`">{{it.k}}</span> <span class="m" :style="`font-weight: 500; color: ${it.c}`">{{it.v}}</span></span>
+      </template>
+      <button type="button" @click="toggleRo" :aria-expanded="roMore" class="lbl" :style="`margin-left: auto; border: 0; background: none; padding: 0; color: ${t.acc}; cursor: pointer`">{{roBtn}}</button>
+    </div>
+
+    <template v-if="brushSum.on">
+    <div role="region" aria-label="Selected window" :style="`display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; padding: 8px 12px; margin: -4px 0 10px; border: 1px solid ${t.brushEdge}; background: ${t.bg}; font-size: 13px`">
+      <strong class="m" style="font-weight: 600">{{brushSum.label}}</strong>
+      <span class="lbl" :style="`color: ${t.text3}`">window · {{brushSum.n}}</span>
+      <template v-for="it in brushSum.items"><span><span :style="`color: ${t.text3}`">{{it.k}}</span> <span class="m" :style="`font-weight: 500; color: ${it.c}`">{{it.v}}</span></span></template>
+      <button type="button" @click="clearBrush" class="lbl" :style="`margin-left: auto; border: 1px solid ${t.border}; background: transparent; color: ${t.text2}; height: 24px; padding: 0 8px; cursor: pointer`">Clear</button>
+    </div>
+    </template>
+    <!-- Trading status: delivered / locked (past gate closure) / tradable -->
+    <div style="display: flex; margin-bottom: 4px">
+      <div style="width: 56px; flex: none"></div>
+      <div role="img" :aria-label="trade.aria" style="flex: 1; min-width: 0; display: flex; height: 24px; font-size: 12px">
+        <span class="lbl" :style="`width: 37.5%; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; box-sizing: border-box; color: ${t.text3}; border-bottom: 2px solid ${t.grid}`">Delivered</span>
+        <span class="lbl" :style="`width: ${trade.lockW}; display: flex; align-items: center; justify-content: center; overflow: hidden; background: repeating-linear-gradient(135deg, rgba(237,239,242,0.10) 0 3px, transparent 3px 7px); border-bottom: 2px solid ${t.text3}; color: ${t.text2}`">Locked</span>
+        <span :style="`flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding-left: 8px; border-bottom: 2px solid ${trade.c}; white-space: nowrap; overflow: hidden`"><span class="lbl" :style="`font-weight: 600; color: ${trade.c}`">{{trade.label}}</span><span :style="`color: ${t.text2}; overflow: hidden; text-overflow: ellipsis`">{{trade.note}}</span></span>
+      </div>
+    </div>
+    <div @mouseleave="leave">
+    <!-- Main chart -->
+    <div style="display: flex">
+      <div class="m" :style="`width: 56px; flex: none; position: relative; height: 300px; font-size: 12px; color: ${t.text3}`">
+        <template v-for="y in yTicks"><span :style="`position: absolute; right: 8px; bottom: ${y.pos}; transform: translateY(50%)`">{{y.label}}</span></template>
+      </div>
+      <div style="flex: 1; min-width: 0; position: relative; height: 300px">
+        <template v-for="sh in shades">
+          <div :class="sh.cls" :style="`position: absolute; top: 0; bottom: 0; left: ${sh.left}; width: ${sh.width}; background: ${sh.bg}; border-left: 1px solid ${sh.edge}; border-right: 1px solid ${sh.edge}`"></div>
+          <span class="lbl" :style="`position: absolute; top: ${sh.top}; left: ${sh.left}; margin-left: 6px; font-weight: 600; color: ${sh.fg}; white-space: nowrap`">{{sh.label}}</span>
+        </template>
+        <template v-for="gp in gap">
+          <div :style="`position: absolute; top: 0; bottom: 0; left: ${gp.left}; width: ${gp.width}; background: repeating-linear-gradient(135deg, rgba(237,239,242,0.05) 0 4px, transparent 4px 9px)`"></div>
+          <span class="lbl" :style="`position: absolute; top: 22px; left: ${gp.left}; margin-left: 4px; color: ${t.text3}; line-height: 1.25`">Price not<br>published yet</span>
+        </template>
+        <svg viewBox="0 0 640 300" preserveAspectRatio="none" role="img" :aria-label="chartAria" style="position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible">
+          <template v-for="g in gridLines"><line x1="0" x2="640" :y1="g.y" :y2="g.y" :stroke="t.grid" stroke-width="1" vector-effect="non-scaling-stroke"></line></template>
+          <path :d="paths.bandPast" :fill="t.bandPast"></path>
+          <path :d="paths.band" :fill="bandC"></path>
+          <path :d="paths.spot" fill="none" :stroke="t.spot" stroke-width="1.25" stroke-dasharray="1 3" vector-effect="non-scaling-stroke"></path>
+          <path :d="paths.prev" fill="none" :stroke="t.ghost" stroke-width="1.5" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"></path>
+          <path :d="paths.p50Past" fill="none" :stroke="t.text3" stroke-width="1.25" vector-effect="non-scaling-stroke"></path>
+          <path :d="paths.p50" fill="none" :stroke="t.fcGlow" stroke-width="7" vector-effect="non-scaling-stroke"></path>
+          <path :d="paths.p50" fill="none" :stroke="fcC" stroke-width="2.25" vector-effect="non-scaling-stroke"></path>
+          <path :d="paths.cmp" fill="none" :stroke="t.info" stroke-width="1.5" stroke-dasharray="7 3 1 3" vector-effect="non-scaling-stroke"></path>
+          <path :d="paths.actual" fill="none" :stroke="t.act" stroke-width="2" vector-effect="non-scaling-stroke"></path>
+          <path :d="paths.actOk" fill="none" :stroke="t.act" stroke-width="2" vector-effect="non-scaling-stroke"></path>
+          <path :d="paths.actMiss" fill="none" :stroke="t.rev" stroke-width="2.75" vector-effect="non-scaling-stroke"></path>
+          <path :d="paths.actualFuture" fill="none" :stroke="t.act" stroke-width="2" stroke-dasharray="2 2" vector-effect="non-scaling-stroke"></path>
+        </svg>
+        <div :style="`position: absolute; top: -6px; bottom: 0; left: 37.5%; width: 0; border-left: 1.5px solid ${t.acc}`"></div>
+        <div aria-hidden="true" :style="`position: absolute; top: 0; bottom: 0; left: ${trade.gateL}; width: 0; border-left: 1px dashed ${t.text3}`"></div>
+        <template v-if="dim"><span class="lbl" :style="`position: absolute; top: 6px; right: 8px; z-index: 2; color: ${t.watch}; background: ${t.surf}; border: 1px solid ${t.watch}; padding: 2px 8px`">Inputs late · verify before trading</span></template>
+        <span class="lbl" :style="`position: absolute; bottom: 4px; left: 37.5%; margin-left: 6px; color: ${t.acc}; font-weight: 600; white-space: nowrap`">{{nowLabel}}</span>
+        <span class="lbl" :style="`position: absolute; bottom: 4px; right: 62.5%; margin-right: 6px; color: ${t.text3}; white-space: nowrap`">{{pastLabel}}</span>
+        <template v-for="v in valueLabels">
+          <span class="m" :style="`position: absolute; left: ${v.left}; bottom: ${v.bottom}; transform: translate(-50%, -6px); font-size: 12px; font-weight: 600; color: ${t.fc}; background: ${t.surf}; padding: 0 2px; white-space: nowrap`">{{v.text}}</span>
+        </template>
+        <template v-for="mk in markers">
+          <template v-if="mk.caught"><span aria-hidden="true" :style="`position: absolute; left: ${mk.left}; bottom: ${mk.bottom}; width: 9px; height: 9px; transform: translate(-50%, 50%); border: 2px solid ${t.text}; border-radius: 50%; box-sizing: border-box`"></span></template>
+          <template v-if="mk.missed"><span aria-hidden="true" :style="`position: absolute; left: ${mk.left}; bottom: ${mk.bottom}; width: 9px; height: 9px; transform: translate(-50%, 50%) rotate(45deg); background: ${t.rev}`"></span></template>
+        </template>
+        <template v-for="o in offscale">
+          <span class="m" :style="`position: absolute; top: -2px; left: ${o.left}; transform: translateX(-50%); font-size: 12px; font-weight: 600; color: ${o.c}; background: ${t.surf}; padding: 0 3px; white-space: nowrap`">▲ {{o.label}}</span>
+        </template>
+        <div style="position: absolute; inset: 0; display: flex">
+          <template v-for="c in cells">
+            <button type="button" @mouseenter="c.enter" @focus="c.enter" @mousedown="c.down" @mouseup="c.up" @click="c.pick" :aria-label="c.aria" :aria-pressed="c.sel" :style="`flex: 1; min-width: 0; padding: 0; margin: 0; border: 0; background: ${c.bg}; box-shadow: ${c.ring}; cursor: crosshair; user-select: none`"></button>
+          </template>
+        </div>
+        <template v-if="brushSum.on">
+          <div aria-hidden="true" :style="`position: absolute; top: 0; bottom: 0; left: ${brushSum.left}; width: ${brushSum.width}; border-left: 1px solid ${t.brushEdge}; border-right: 1px solid ${t.brushEdge}; pointer-events: none`"></div>
+        </template>
+        <template v-if="tip.on">
+          <div role="tooltip" :style="`position: absolute; z-index: 3; pointer-events: none; left: ${tip.left}; top: ${tip.top}; bottom: ${tip.bottom}; transform: ${tip.tx}; width: 240px; background: ${t.surf2}; border: 1px solid ${t.border}; box-shadow: ${t.shadow}; padding: 8px 10px; font-size: 12px`">
+            <div style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 5px"><strong class="m" style="font-weight: 600">{{tip.time}}</strong><span class="lbl" :style="`color: ${t.text3}`">{{tip.kind}}</span></div>
+            <div style="display: grid; grid-template-columns: auto 1fr; gap: 2px 10px">
+              <template v-for="it in tip.items"><span :style="`color: ${t.text3}`">{{it.k}}</span><span class="m" :style="`text-align: right; font-weight: 500; color: ${it.c}`">{{it.v}}</span></template>
+            </div>
+            <template v-if="tip.hasV">
+              <div :style="`margin-top: 6px; padding-top: 6px; border-top: 1px solid ${t.border}; display: flex; flex-direction: column; gap: 3px`">
+                <template v-for="vd in tip.verdicts"><span><span class="m" :style="`color: ${vd.c}; font-weight: 600`">{{vd.g}}</span> {{vd.text}}</span></template>
+              </div>
+            </template>
+            <div class="lbl" :style="`margin-top: 6px; color: ${t.text3}`">Click to pin · drag to select</div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Direction strip -->
+    <template v-if="layerDir">
+    <div style="display: flex; margin-top: 10px">
+      <div class="lbl" style="width: 56px; flex: none; position: relative; height: 60px; line-height: 1.2">
+        <span :style="`position: absolute; top: 2px; right: 8px; color: ${t.up}`">▲ Up</span>
+        <span :style="`position: absolute; bottom: 2px; right: 8px; color: ${t.down}`">▼ Dn</span>
+      </div>
+      <div :style="`flex: 1; min-width: 0; position: relative; height: 60px; border-top: 1px solid ${t.grid}; border-bottom: 1px solid ${t.grid}`">
+        <div :style="`position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid ${t.border}`"></div>
+        <div style="position: absolute; inset: 0; display: flex">
+          <template v-for="c in cells">
+            <button type="button" tabindex="-1" aria-hidden="true" @mouseenter="c.enter" @click="c.pick" :style="`flex: 1; min-width: 0; padding: 0 1px; margin: 0; border: 0; background: ${c.bg}; position: relative; cursor: crosshair`">
+              <span :style="`position: absolute; left: 1px; right: 1px; bottom: 50%; height: ${c.upH}; background: ${c.upC}`"></span>
+              <span :style="`position: absolute; left: 1px; right: 1px; top: 50%; height: ${c.downH}; background: ${c.downC}`"></span>
+            </button>
+          </template>
+        </div>
+        <div :style="`position: absolute; top: 0; bottom: 0; left: 37.5%; border-left: 1.5px solid ${t.acc}`"></div>
+      </div>
+    </div>
+    <div :style="`display: flex; font-size: 12px; color: ${t.text3}; margin: 3px 0 0`"><span style="width: 56px; flex: none"></span><span><span class="lbl">02 · Direction</span> · chance the grid needs more power (up) or less (down). Left of now: what happened.</span></div>
+    </template>
+
+    <!-- Spike strip -->
+    <template v-if="layerSpike">
+    <div style="display: flex; margin-top: 10px">
+      <div class="lbl" :style="`width: 56px; flex: none; position: relative; height: 60px; color: ${t.text3}; line-height: 1.2`">
+        <span style="position: absolute; top: 2px; right: 8px">High</span>
+        <span style="position: absolute; bottom: 2px; right: 8px">Low</span>
+      </div>
+      <div :style="`flex: 1; min-width: 0; position: relative; height: 60px; border-top: 1px solid ${t.grid}; border-bottom: 1px solid ${t.grid}`">
+        <div :style="`position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid ${t.border}`"></div>
+        <div :style="`position: absolute; left: 0; right: 0; top: ${alarmHiTop}; border-top: 1px dashed ${t.rev}; opacity: 0.7`"></div>
+        <div :style="`position: absolute; left: 0; right: 0; top: ${alarmLoTop}; border-top: 1px dashed ${t.rev}; opacity: 0.7`"></div>
+        <span class="m" :style="`position: absolute; right: 2px; top: 2px; font-size: 12px; color: ${t.rev}`">{{alarmLabel}}</span>
+        <div style="position: absolute; inset: 0; display: flex">
+          <template v-for="c in cells">
+            <button type="button" tabindex="-1" aria-hidden="true" @mouseenter="c.enter" @click="c.pick" :style="`flex: 1; min-width: 0; padding: 0; margin: 0; border: 0; background: ${c.bg}; position: relative; cursor: crosshair`">
+              <span :style="`position: absolute; left: 1px; right: 1px; bottom: 50%; height: ${c.hiH}; background: ${c.hiC}`"></span>
+              <span :style="`position: absolute; left: 1px; right: 1px; top: 50%; height: ${c.loH}; background: ${c.loC}`"></span>
+              <span :style="`position: absolute; left: 0; right: 0; top: 0; height: 5px; background: ${c.hiAct}`"></span>
+              <span :style="`position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: ${c.loAct}`"></span>
+            </button>
+          </template>
+        </div>
+        <div :style="`position: absolute; top: 0; bottom: 0; left: 37.5%; border-left: 1.5px solid ${t.acc}`"></div>
+      </div>
+    </div>
+    <div :style="`display: flex; font-size: 12px; color: ${t.text3}; margin: 3px 0 0`"><span style="width: 56px; flex: none"></span><span><span class="lbl">03 · Spike risk</span> · chance of more than €50 above spot (high) or below spot (low), scale 0–50% · dashed: tuned alarm levels · edge rows left of now: actual spikes.</span></div>
+    </template>
+
+    <!-- Hits & misses (past side only) -->
+    <template v-if="layerHits">
+    <div style="display: flex; align-items: center; gap: 10px; margin: 12px 0 0 56px">
+      <button type="button" @click="toggleHits" :aria-expanded="hitsOpen" class="lbl" :style="`border: 0; background: none; padding: 2px 0; color: ${t.text}; cursor: pointer; font-weight: 600`">{{hitsTitle}}</button>
+      <template v-if="hitsClosed"><span :style="`font-size: 12px; color: ${t.text2}`"><template v-for="hr in hitRows"><span style="margin-right: 14px">{{hr.name}} <strong class="m" :style="`color: ${t.text}`">{{hr.score}}</strong></span></template></span></template>
+    </div>
+    <template v-if="hitsOpen">
+    <div style="display: flex; margin-top: 6px">
+      <div class="lbl" :style="`width: 56px; flex: none; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; padding-right: 8px; box-sizing: border-box; color: ${t.text3}; line-height: 12px`">
+        <span>Price</span><span>Dir</span><span>Spike</span>
+      </div>
+      <div style="flex: 1; min-width: 0; position: relative">
+        <template v-for="hr in hitRows">
+          <div style="display: flex; height: 12px; margin-bottom: 3px">
+            <template v-for="hc in hr.cells">
+              <span :title="hc.tip" :style="`flex: 1; min-width: 0; margin: 0 1px; background: ${hc.c}`"></span>
+            </template>
+          </div>
+        </template>
+        <div :style="`position: absolute; top: -2px; bottom: 0; left: 37.5%; border-left: 1.5px solid ${t.acc}`"></div>
+        <span class="lbl" :style="`position: absolute; top: 0; left: 37.5%; margin-left: 8px; color: ${t.text3}; white-space: nowrap`">not known yet</span>
+      </div>
+    </div>
+    <div :style="`display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: ${t.text3}; margin: 3px 0 0 56px`">
+      <span><span class="lbl">Hits &amp; misses</span> · last 6 h, forecasts made {{leadShort}} ahead</span>
+      <template v-for="hr in hitRows"><span>{{hr.name}} <strong class="m" :style="`color: ${t.text}; font-weight: 600`">{{hr.score}}</strong></span></template>
+      <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" :style="`width: 10px; height: 8px; background: ${t.hitC}`"></span>right</span>
+      <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" :style="`width: 10px; height: 8px; background: ${t.rev}`"></span>missed</span>
+      <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" :style="`width: 10px; height: 8px; background: ${t.text}`"></span>spike caught</span>
+      <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" :style="`width: 10px; height: 8px; background: ${t.spread}`"></span>false alarm</span>
+    </div>
+    </template>
+    </template>
+
+    <template v-if="layerSpread">
+    <div style="display: flex; margin-top: 10px">
+      <div class="lbl" :style="`width: 56px; flex: none; position: relative; height: 34px; color: ${t.text3}; line-height: 1.15`">
+        <span style="position: absolute; top: 2px; right: 8px; text-align: right">Model<br>spread</span>
+      </div>
+      <div :style="`flex: 1; min-width: 0; position: relative; height: 34px; border-bottom: 1px solid ${t.grid}`">
+        <div style="position: absolute; inset: 0; display: flex; align-items: flex-end">
+          <template v-for="c in cells">
+            <button type="button" tabindex="-1" aria-hidden="true" @mouseenter="c.enter" @click="c.pick" :style="`flex: 1; min-width: 0; height: 100%; padding: 0; margin: 0; border: 0; background: ${c.bg}; position: relative; cursor: crosshair`">
+              <span :style="`position: absolute; left: 1px; right: 1px; bottom: 0; height: ${c.sprH}; background: ${c.sprC}`"></span>
+            </button>
+          </template>
+        </div>
+        <div :style="`position: absolute; top: 0; bottom: 0; left: 37.5%; border-left: 1.5px solid ${t.acc}`"></div>
+      </div>
+    </div>
+    </template>
+
+    <!-- Time axis -->
+    <div style="display: flex; margin-top: 4px">
+      <div class="m" :style="`width: 56px; flex: none; font-size: 12px; color: ${t.text3}; text-align: right; padding-right: 8px; box-sizing: border-box`">{{tzName}}</div>
+      <div class="m" :style="`flex: 1; min-width: 0; position: relative; height: 16px; font-size: 12px; color: ${t.text3}`">
+        <template v-for="x in xTicks"><span :style="`position: absolute; left: ${x.left}; transform: ${x.tx}; color: ${x.c}`">{{x.label}}</span></template>
+      </div>
+    </div>
+    </div>
+
+    <template v-if="hasVerdicts">
+    <ul aria-label="How the forecast did for this quarter-hour" :style="`list-style: none; margin: 12px 0 0 56px; padding: 8px 12px; border: 1px solid ${t.grid}; background: ${t.bg}; display: flex; flex-direction: column; gap: 4px; font-size: 13px`">
+      <template v-for="vd in verdicts">
+        <li style="display: grid; grid-template-columns: 16px 76px minmax(0, 1fr); gap: 8px; align-items: baseline"><span class="m" aria-hidden="true" :style="`color: ${vd.c}; font-weight: 600`">{{vd.g}}</span><span class="lbl" :style="`color: ${t.text3}`">{{vd.what}}</span><span>{{vd.text}}</span></li>
+      </template>
+    </ul>
+    </template>
+
+    <!-- Day navigator: pick the point of review -->
+    <div :style="`display: flex; margin-top: 14px; padding-top: 10px; border-top: 1px solid ${t.grid}`">
+      <div class="lbl" :style="`width: 56px; flex: none; color: ${t.text3}; padding-right: 8px; box-sizing: border-box; text-align: right; line-height: 1.2`">{{navDay}}</div>
+      <div style="flex: 1; min-width: 0">
+        <div role="group" aria-label="Move the point of review: actual price per hour today" style="display: flex; align-items: flex-end; height: 40px; gap: 2px">
+          <template v-for="n in nav">
+            <button type="button" @click="n.pick" :disabled="n.off" :aria-label="n.aria" :aria-pressed="n.cur" :style="`flex: 1; min-width: 0; height: 100%; padding: 0; margin: 0; border: 0; border-bottom: 2px solid ${n.under}; background: ${n.win}; position: relative; cursor: ${n.cursor}`">
+              <span :style="`position: absolute; left: 2px; right: 2px; bottom: 0; height: ${n.h}; background: ${n.c}; opacity: ${n.op}`"></span>
+            </button>
+          </template>
+        </div>
+        <div class="m" :style="`display: flex; gap: 2px; font-size: 12px; color: ${t.text3}; margin-top: 3px`">
+          <template v-for="n in nav"><span :style="`flex: 1; min-width: 0; text-align: center; color: ${n.lc}`">{{n.label}}</span></template>
+        </div>
+        <div :style="`font-size: 12px; color: ${t.text3}; margin-top: 4px`"><span class="lbl">Navigator</span> · bars: actual price per hour (red: a spike hour) · shaded: what the chart shows · click an hour to review it as it was then</div>
+      </div>
+    </div>
+
+    <!-- Table view -->
+    <template v-if="tableOn">
+    <div :style="`margin-top: 14px; max-height: 360px; overflow: auto; border: 1px solid ${t.grid}`">
+      <table style="width: 100%; border-collapse: collapse; font-size: 12px">
+        <caption class="lbl" :style="`text-align: left; padding: 8px 10px; color: ${t.text3}`">Forecast made {{madeLabel}} · every value the chart draws</caption>
+        <thead><tr class="lbl" :style="`color: ${t.text3}; text-align: right; background: ${t.surf2}`">
+          <th style="text-align: left; padding: 6px 10px; font-weight: 500">Quarter</th><th style="font-weight: 500">P10</th><th style="font-weight: 500">P50</th><th style="font-weight: 500">P90</th><th style="font-weight: 500">Spot</th><th style="font-weight: 500">Up</th><th style="font-weight: 500">Down</th><th style="font-weight: 500">High</th><th style="font-weight: 500; padding-right: 10px">Low</th>
+        </tr></thead>
+        <tbody>
+          <template v-for="r in tableRows">
+          <tr class="m" :style="`border-top: 1px solid ${t.grid}; text-align: right`">
+            <td style="text-align: left; padding: 4px 10px">{{r.time}}</td><td>{{r.p10}}</td><td :style="`color: ${t.fc}; font-weight: 600`">{{r.p50}}</td><td>{{r.p90}}</td><td :style="`color: ${t.text2}`">{{r.spot}}</td><td :style="`color: ${t.up}`">{{r.up}}</td><td :style="`color: ${t.down}`">{{r.down}}</td><td :style="`color: ${r.hiC}`">{{r.hi}}</td><td style="padding-right: 10px">{{r.lo}}</td>
+          </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+    </template>
+  </section>
+
+  <!-- ============ DETAIL ROW ============ -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px">
+
+    <section aria-label="Why: drivers for the selected quarter-hour" class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 12px 16px`">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px">
+        <span class="m" :style="`font-size: 12px; font-weight: 600; background: ${t.surf2}; color: ${t.text2}; border: 1px solid ${t.border}; padding: 0 5px`">04</span>
+        <h2 class="lbl" :style="`margin: 0; font-weight: 600; color: ${t.text}`">Why <span class="m" :style="`color: ${t.text}`">{{why.time}}</span></h2>
+        <span style="flex: 1"></span>
+        <span class="m" :style="`font-size: 12px; color: ${t.text3}`">€ vs spot</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <template v-for="w in why.rows">
+          <div style="display: grid; grid-template-columns: minmax(0, 1fr) 72px 40px; gap: 10px; align-items: center">
+            <div style="min-width: 0"><div style="font-size: 13px; line-height: 1.3">{{w.label}}</div><div class="m" :style="`font-size: 12px; color: ${t.text3}`">{{w.feature}}</div></div>
+            <div style="position: relative; height: 10px">
+              <div :style="`position: absolute; left: 50%; top: -3px; bottom: -3px; border-left: 1px solid ${t.border}`"></div>
+              <div :style="`position: absolute; top: 0; height: 10px; left: ${w.left}; width: ${w.width}; background: ${w.color}`"></div>
+            </div>
+            <div class="m" style="text-align: right; font-weight: 500; font-size: 13px">{{w.value}}</div>
+          </div>
+        </template>
+      </div>
+      <div :style="`margin-top: 12px; padding-top: 10px; border-top: 1px solid ${t.grid}; font-size: 13px; color: ${t.text2}`">Spot <strong class="m" :style="`color: ${t.text}; font-weight: 500`">{{why.spot}}</strong> + drivers <strong class="m" :style="`color: ${t.text}; font-weight: 500`">{{why.sum}}</strong> = <strong class="m" :style="`color: ${t.fc}; font-weight: 600`">{{why.p50}}</strong></div>
+    </section>
+
+    <section aria-label="Model agreement" class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 12px 16px`">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px">
+        <span class="m" :style="`font-size: 12px; font-weight: 600; background: ${t.surf2}; color: ${t.text2}; border: 1px solid ${t.border}; padding: 0 5px`">05</span>
+        <h2 class="lbl" :style="`margin: 0; font-weight: 600; color: ${t.text}`">Do the models agree?</h2>
+        <span style="flex: 1"></span>
+        <span class="m" :style="`font-size: 12px; color: ${t.text3}`">{{why.time}}</span>
+      </div>
+      <div :style="`font-size: 20px; font-weight: 600; color: ${agree.c}`">{{agree.verdict}}</div>
+      <div :style="`font-size: 13px; color: ${t.text2}; margin: 2px 0 14px`">Best guesses of XGBoost, LightGBM and QRF: <span class="m">{{agree.range}}</span> (spread <span class="m">{{agree.spread}}</span>)</div>
+      <div style="position: relative; height: 28px; margin: 0 4px">
+        <div :style="`position: absolute; left: 0; right: 0; top: 13px; border-top: 1px solid ${t.border}`"></div>
+        <div :style="`position: absolute; top: 6px; height: 16px; left: ${agree.bandL}; width: ${agree.bandW}; background: ${t.band}`"></div>
+        <div :style="`position: absolute; top: 3px; height: 22px; left: ${agree.minL}; border-left: 2px solid ${t.text2}`"></div>
+        <div :style="`position: absolute; top: 3px; height: 22px; left: ${agree.maxL}; border-left: 2px solid ${t.text2}`"></div>
+        <div :style="`position: absolute; top: 0; height: 28px; left: ${agree.p50L}; border-left: 2px solid ${t.fc}`"></div>
+      </div>
+      <div class="m" :style="`display: flex; justify-content: space-between; font-size: 12px; color: ${t.text3}; margin: 4px 4px 0`"><span>{{agree.axisMin}}</span><span>{{agree.axisMax}}</span></div>
+      <p :style="`margin: 12px 0 0; font-size: 12px; color: ${t.text3}`">Shaded: likely range (p10–p90). Grey ticks: lowest and highest model. A spread above €60 lowers trust.</p>
+    </section>
+
+    <section aria-label="Changed since the previous update" class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 12px 16px`">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px">
+        <span class="m" :style="`font-size: 12px; font-weight: 600; background: ${t.surf2}; color: ${t.text2}; border: 1px solid ${t.border}; padding: 0 5px`">06</span>
+        <h2 class="lbl" :style="`margin: 0; font-weight: 600; color: ${t.text}`">Changed since {{prevShort}}</h2>
+        <span style="flex: 1"></span>
+        
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <template v-for="ch in changes">
+          <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px">
+            <span style="font-size: 13px">{{ch.label}}</span>
+            <span class="m" :style="`font-size: 14px; font-weight: 600; text-align: right; color: ${ch.c}`">{{ch.value}}</span>
+            <span :style="`font-size: 12px; color: ${t.text3}`">{{ch.detail}}</span>
+          </div>
+        </template>
+      </div>
+    </section>
+  </div>
+  </div>
+
+  <!-- ============ RIGHT: ALERTS + TRUST ============ -->
+  <div style="flex: 1 1 380px; min-width: 0; max-width: 100%; display: flex; flex-direction: column; gap: 14px">
+  <section aria-label="Your exposure" class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px`">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <span class="m" :style="`font-size: 12px; font-weight: 600; background: ${t.surf2}; color: ${t.text2}; border: 1px solid ${t.border}; padding: 0 5px`">10</span>
+      <h2 class="lbl" :style="`margin: 0; font-weight: 600; color: ${t.text}`">Your exposure</h2>
+      <span style="flex: 1"></span>
+      <span class="m" :style="`font-size: 12px; color: ${t.text3}`">{{expo.horizon}}</span>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px">
+      <label for="expo-q" style="display: flex; flex-direction: column; gap: 4px"><span class="lbl" :style="`color: ${t.text3}`">Expected imbalance</span>
+        <span style="display: flex; align-items: center; gap: 6px"><input id="expo-q" type="number" step="1" :value="expo.q" @input="expo.setQ" class="m" :style="`width: 92px; height: 34px; box-sizing: border-box; padding: 0 8px; border: 1px solid ${t.border}; background: ${t.bg}; color: ${t.text}; font-size: 15px`"><span class="m" :style="`font-size: 12px; color: ${t.text3}`">MWh per 15 min</span></span>
+      </label>
+      <div role="group" aria-label="Exposure horizon" :style="`display: flex; border: 1px solid ${t.border}`">
+        <template v-for="h in expo.hs"><button type="button" @click="h.pick" :aria-pressed="h.on" class="m" :style="`height: 32px; padding: 0 10px; border: 0; border-left: 1px solid ${h.sep}; background: ${h.bg}; color: ${h.fg}; cursor: pointer; font-size: 12px`">{{h.label}}</button></template>
+      </div>
+    </div>
+    <p :style="`margin: 0; font-size: 13px; color: ${t.text2}`">{{expo.side}}</p>
+    <div style="display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 6px 12px; align-items: baseline; font-size: 13px">
+      <span class="lbl" :style="`color: ${t.text3}`">Best guess</span><strong class="m" :style="`font-size: 22px; font-weight: 600; color: ${expo.c}`">{{expo.p50}}</strong>
+      <span class="lbl" :style="`color: ${t.text3}`">Likely range</span><span class="m">{{expo.range}}</span>
+      <span class="lbl" :style="`color: ${t.text3}`">Hedgeable</span><span>{{expo.tradable}}</span>
+    </div>
+    <p :style="`margin: 0; font-size: 12px; color: ${t.text3}`">{{expo.note}}</p>
+  </section>
+  <section aria-label="Grid right now" class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 12px 14px`">
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px">
+      <span class="m" :style="`font-size: 12px; font-weight: 600; background: ${t.surf2}; color: ${t.text2}; border: 1px solid ${t.border}; padding: 0 5px`">09</span>
+      <h2 class="lbl" :style="`margin: 0; font-weight: 600; color: ${t.text}`">Grid right now</h2>
+      <span style="flex: 1"></span>
+      <span class="m" :style="`font-size: 12px; color: ${t.text3}`">Fingrid · every 3 min</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 6px 12px; align-items: center; font-size: 13px">
+      <span class="lbl" :style="`color: ${t.text3}`">System state</span>
+      <span style="display: flex; align-items: center; gap: 8px"><span aria-hidden="true" :style="`width: 9px; height: 9px; border-radius: 50%; background: ${grid.dot}`"></span><strong :style="`font-weight: 600; color: ${grid.stateC}`">{{grid.state}}</strong></span>
+      <span class="lbl" :style="`color: ${t.text3}`">Balance, last h</span>
+      <span><strong class="m" :style="`font-weight: 600; color: ${grid.cumC}`">{{grid.cum}}</strong> <span :style="`color: ${t.text2}`">· short {{grid.short}}</span></span>
+    </div>
+    <template v-if="grid.ok">
+    <div role="img" aria-label="Real-time balance over the last hour, every 3 minutes: bars up mean Finland was short of power, bars down mean surplus" :style="`position: relative; height: 46px; margin-top: 10px; display: flex; gap: 2px; border-top: 1px solid ${t.grid}; border-bottom: 1px solid ${t.grid}`">
+      <div :style="`position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid ${t.border}`"></div>
+      <template v-for="b in grid.bars">
+        <span :title="b.tip" style="flex: 1; position: relative"><span :style="`position: absolute; left: 0; right: 0; bottom: 50%; height: ${b.upH}; background: ${b.c}`"></span><span :style="`position: absolute; left: 0; right: 0; top: 50%; height: ${b.downH}; background: ${b.c}`"></span></span>
+      </template>
+    </div>
+    <div class="m" :style="`display: flex; justify-content: space-between; font-size: 12px; color: ${t.text3}; margin-top: 2px`"><span>−60 min</span><span>▲ short · ▼ surplus</span><span>now</span></div>
+    </template>
+    <p :style="`margin: 8px 0 0; font-size: 12px; color: ${t.text2}`">{{grid.note}}</p>
+  </section>
+  <section aria-label="Situations to check" class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px`">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <span class="m" :style="`font-size: 12px; font-weight: 600; background: ${t.surf2}; color: ${t.text2}; border: 1px solid ${t.border}; padding: 0 5px`">07</span>
+      <h2 class="lbl" :style="`margin: 0; font-weight: 600; color: ${t.text}`">Situations to check</h2>
+      <span style="flex: 1"></span>
+      <span class="m" :style="`font-size: 12px; color: ${t.text3}`">{{alertCountLabel}}</span>
+    </div>
+    <template v-if="noAlerts">
+      <div :style="`border: 1px dashed ${t.border}; padding: 18px 16px`">
+        <div style="font-weight: 600; font-size: 15px">No situations need attention in the next 10 hours</div>
+        <p :style="`margin: 6px 0 0; color: ${t.text2}; font-size: 13px`">Price risk, regulation and model agreement are within normal ranges. Next update <span class="m">{{nextShort}}</span>.</p>
+      </div>
+    </template>
+    <template v-for="a in alerts">
+      <article :aria-label="a.aria" :style="`background: ${t.bg}; border: 1px solid ${a.border}; box-shadow: ${a.glow}`">
+        <button type="button" @click="a.toggle" :aria-expanded="a.open" :style="`width: 100%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border: 0; background: none; color: ${t.text}; cursor: pointer; font: inherit; text-align: left`">
+          <span class="lbl" :style="`display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: ${a.fg}; background: ${a.bg}; padding: 2px 7px; flex: none`">
+            <template v-if="a.isReview"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 1.5 L13 12.5 H1 Z"></path><path d="M7 5.5 V8.5"></path><circle cx="7" cy="10.5" r="0.6" fill="currentColor"></circle></svg></template>
+            <template v-if="a.isWatch"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1 7 C3 3.5 11 3.5 13 7 C11 10.5 3 10.5 1 7 Z"></path><circle cx="7" cy="7" r="1.8"></circle></svg></template>
+            <template v-if="a.isInfo"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5.5"></circle><path d="M7 6.5 V10"></path><circle cx="7" cy="4.3" r="0.6" fill="currentColor"></circle></svg></template>
+            {{a.sevLabel}}
+          </span>
+          <span class="m" :style="`font-size: 13px; font-weight: 500; flex: none; color: ${a.fg}`">{{a.window}}</span>
+          <template v-if="a.hasActBy"><span class="m" :style="`font-size: 12px; font-weight: 600; flex: none; color: ${t.text}; border: 1px solid ${t.border}; padding: 0 6px`">{{a.actBy}}</span></template>
+          <template v-if="a.acked"><span class="lbl" :style="`flex: none; color: ${t.text3}`">✓ Ack {{a.ackAt}}</span></template>
+          <span :style="`flex: 1 1 160px; min-width: 0; font-size: 13px; font-weight: ${a.titleW}`">{{a.short}}</span>
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" fill="none" :stroke="t.text3" stroke-width="1.5" :style="`flex: none; transform: ${a.chev}`"><path d="M3 4.5 L6 7.5 L9 4.5"></path></svg>
+        </button>
+        <template v-if="a.open">
+        <div style="padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px">
+          <h3 style="margin: 0; font-size: 14px; font-weight: 600; line-height: 1.35">{{a.title}}</h3>
+          <p :style="`margin: 0; font-size: 13px; color: ${t.text2}`">{{a.message}}</p>
+          <div style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px">
+            <span><span class="lbl" :style="`color: ${t.text3}`">Prob</span> <strong class="m" style="font-weight: 600">{{a.prob}}</strong></span>
+            <span><span class="lbl" :style="`color: ${t.text3}`">Since {{prevShort}}</span> <strong class="m" style="font-weight: 600">{{a.change}}</strong></span>
+            <span><span class="lbl" :style="`color: ${t.text3}`">Models</span> <strong class="m" style="font-weight: 600">{{a.agree}}</strong></span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 4px">
+            <template v-for="d in a.drivers"><span class="m" :style="`font-size: 12px; color: ${t.text2}; border: 1px solid ${t.border}; padding: 1px 6px`">{{d.text}}</span></template>
+          </div>
+          <div :style="`display: flex; align-items: flex-start; gap: 8px; padding-top: 8px; border-top: 1px solid ${t.grid}; font-size: 13px`">
+            <span class="lbl" :style="`color: ${t.text3}; flex: none; padding-top: 2px`">Check</span>
+            <span style="flex: 1">{{a.check}}</span>
+            <button type="button" @click="a.focus" class="lbl" :style="`flex: none; height: 26px; padding: 0 8px; border: 1px solid ${t.border}; background: ${t.surf2}; color: ${t.text}; cursor: pointer`">Show</button>
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 8px; font-size: 13px">
+            <span class="lbl" :style="`color: ${t.text3}; flex: none; padding-top: 2px`">Trading</span>
+            <span style="flex: 1">{{a.trade}}</span>
+          </div>
+          <template v-if="a.hasReraise"><p :style="`margin: 0; font-size: 13px; font-weight: 600; color: ${t.rev}`">{{a.reraise}}</p></template>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px">
+            <button type="button" @click="a.ack" :disabled="a.acked" class="lbl" :style="`height: 34px; padding: 0 12px; border: 1px solid ${a.ackBorder}; background: ${t.surf2}; color: ${t.text}; cursor: pointer`">{{a.ackLabel}}</button>
+            <button type="button" @click="a.snooze" class="lbl" :style="`height: 34px; padding: 0 12px; border: 1px solid ${t.border}; background: transparent; color: ${t.text2}; cursor: pointer`">Snooze 1 h</button>
+          </div>
+        </div>
+        </template>
+      </article>
+    </template>
+    <template v-if="hasSnoozed">
+      <div :style="`display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border: 1px dashed ${t.border}; font-size: 13px; color: ${t.text2}`">
+        <span style="flex: 1 1 200px; min-width: 0">{{snoozedLabel}}</span>
+        <button type="button" @click="unsnooze" class="lbl" :style="`height: 30px; padding: 0 10px; border: 1px solid ${t.border}; background: ${t.surf2}; color: ${t.text}; cursor: pointer`">Show again</button>
+      </div>
+    </template>
+    <p :style="`margin: 0; font-size: 12px; color: ${t.text3}`">Prompts for an expert review, not trading instructions. Open market data only: no plant availability, costs, ramp rates or contracts.</p>
+    <label for="handover" :style="`display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid ${t.grid}`">
+      <span class="lbl" :style="`color: ${t.text3}`">Shift handover note</span>
+      <textarea id="handover" rows="3" :value="note" @input="setNote" placeholder="What the next shift should know, e.g. evening position reviewed; check again after the 15:00 run" :style="`resize: vertical; box-sizing: border-box; width: 100%; padding: 8px 10px; border: 1px solid ${t.border}; background: ${t.bg}; color: ${t.text}; font: inherit; font-size: 13px`"></textarea>
+    </label>
+    <span :style="`font-size: 12px; color: ${t.text3}`">{{noteMeta}}</span>
+  </section>
+
+  <section aria-label="Can we trust this run?" class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 12px 14px`">
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px">
+      <span class="m" :style="`font-size: 12px; font-weight: 600; background: ${t.surf2}; color: ${t.text2}; border: 1px solid ${t.border}; padding: 0 5px`">08</span>
+      <h2 class="lbl" :style="`margin: 0; font-weight: 600; color: ${t.text}`">Can we trust this run?</h2>
+      <span style="flex: 1"></span>
+      <button type="button" @click="toggleTrust" :aria-expanded="trustOpen" class="lbl" :style="`border: 0; background: none; padding: 2px 0; color: ${t.acc}; cursor: pointer`">{{trustBtn}}</button>
+    </div>
+    <div style="display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 8px 12px; align-items: center; font-size: 13px">
+      <span class="lbl" :style="`color: ${t.text3}`">Trust</span>
+      <span style="display: flex; align-items: center; gap: 8px; min-width: 0"><span aria-hidden="true" style="display: flex; gap: 3px; flex: none"><span :style="`width: 14px; height: 6px; background: ${trust.b1}`"></span><span :style="`width: 14px; height: 6px; background: ${trust.b2}`"></span><span :style="`width: 14px; height: 6px; background: ${trust.b3}`"></span></span><strong class="m" style="font-weight: 600">{{trust.label}}</strong></span>
+      <span class="lbl" :style="`color: ${t.text3}`">Avg miss</span>
+      <span><strong class="m" style="font-weight: 600">€{{acc.h1}}</strong> <span :style="`color: ${t.text2}`">1 h ahead · {{acc.baseName}} €{{acc.base}}</span></span>
+      <span class="lbl" :style="`color: ${t.text3}`">Range check</span>
+      <span style="display: flex; align-items: center; gap: 10px; min-width: 0">
+        <span><strong class="m" :style="`font-weight: 600; color: ${rc.c}`">{{rc.last24}}</strong> <span :style="`color: ${t.text2}`">inside, last 24 h · aim 80%</span></span>
+        <span aria-hidden="true" style="position: relative; width: 64px; height: 22px; flex: none; display: flex; align-items: flex-end; gap: 2px">
+          <span :style="`position: absolute; left: 0; right: 0; bottom: 80%; border-top: 1px dashed ${t.text3}`"></span>
+          <template v-for="d in rc.days"><span :title="d.tip" :style="`flex: 1; height: ${d.h}; background: ${d.c}`"></span></template>
+        </span>
+      </span>
+    </div>
+    <div :style="`margin-top: 10px; font-size: 12px; color: ${t.text2}`">→ {{rc.verdict}}</div>
+    <template v-if="trustOpen">
+      <div :style="`margin-top: 8px; padding-top: 8px; border-top: 1px solid ${t.grid}; font-size: 12px; color: ${t.text2}; display: flex; flex-direction: column; gap: 4px`">
+        <template v-for="r in trust.reasons"><span>· {{r.text}}</span></template>
+        <span>· Avg miss grows to €{{acc.h10}} at 10 h ahead (last 7 days)</span>
+      </div>
+    </template>
+  </section>
+  </div>
+  </div>
+</main>
+
+<!-- ============ EVENT TICKER ============ -->
+<section aria-label="Event log, latest first" :style="`margin-top: 14px; display: flex; align-items: stretch; border-top: 1px solid ${t.border}; border-bottom: 1px solid ${t.border}; background: ${t.surf}`">
+  <div class="lbl" :style="`flex: none; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 0 16px; background: ${t.surf2}; color: ${t.text2}; font-weight: 600; border-right: 1px solid ${t.border}`">Events<span :style="`font-weight: 400; color: ${t.text3}`">latest 5</span></div>
+  <ol style="flex: 1; min-width: 0; list-style: none; margin: 0; padding: 10px 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 28px">
+    <template v-for="e in events">
+      <li style="display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 13px; line-height: 1.35"><span class="m" :style="`flex: none; color: ${t.text3}`">{{e.time}}</span><span class="lbl" :style="`flex: none; color: ${e.c}; font-weight: 600`">{{e.tag}}</span><span style="min-width: 0">{{e.text}}</span></li>
+    </template>
+  </ol>
+</section>
+
+</template>
+
+<main v-if="tab === 'ov'" style="max-width: 1720px; margin: 0 auto; padding: 16px 24px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">
+  <section aria-label="Headline results" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px">
+    <div v-for="h in ov.head" class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px`">
+      <span class="lbl" :style="`color: ${t.text3}`">{{h.label}}</span>
+      <span class="m" style="font-size: 26px; font-weight: 600; line-height: 1.15">{{h.value}}</span>
+      <span :style="`font-size: 12px; color: ${t.text2}`">{{h.sub}}</span>
+    </div>
+  </section>
+  <section aria-label="Forecast against actual over time" class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 12px 16px`">
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 10px">
+      <h2 class="lbl" :style="`margin: 0; font-weight: 600; color: ${t.text}`">Forecast vs actual · {{ov.title}}</h2>
+      <span class="m" :style="`font-size: 12px; color: ${t.text3}`">€/MWh · 15 min · {{ov.modelName}}</span>
+      <span style="flex: 1"></span>
+      <div role="group" aria-label="Period" :style="`display: flex; border: 1px solid ${t.border}`">
+        <button type="button" @click="ov.prev" aria-label="Earlier" class="m" :style="`height: 28px; padding: 0 9px; border: 0; background: transparent; color: ${t.text}; cursor: pointer`">‹</button>
+        <button v-for="p in ov.presets" type="button" @click="p.pick" :aria-pressed="p.on" class="lbl" :style="`height: 28px; padding: 0 10px; border: 0; border-left: 1px solid ${t.border}; background: ${p.on ? t.acc : 'transparent'}; color: ${p.on ? '#07090C' : t.text2}; cursor: pointer`">{{p.label}}</button>
+        <button type="button" @click="ov.next" aria-label="Later" class="m" :style="`height: 28px; padding: 0 9px; border: 0; border-left: 1px solid ${t.border}; background: transparent; color: ${t.text}; cursor: pointer`">›</button>
+      </div>
+      <div role="group" aria-label="Forecast made this long before delivery" style="display: flex; align-items: center; gap: 6px">
+        <span class="lbl" :style="`color: ${t.text3}`">Made</span>
+        <div :style="`display: flex; border: 1px solid ${t.border}`"><button v-for="l in ov.leads" type="button" @click="l.pick" :aria-pressed="l.on" class="m" :style="`height: 28px; padding: 0 9px; border: 0; background: ${l.on ? t.acc : 'transparent'}; color: ${l.on ? '#07090C' : t.text2}; cursor: pointer; font-size: 12px`">{{l.label}}</button></div>
+        <span class="lbl" :style="`color: ${t.text3}`">ahead</span>
+      </div>
+      <label class="lbl" :style="`display: flex; align-items: center; gap: 6px; color: ${t.text3}`">Model
+        <select @change="pickMainEv" class="m" :style="`height: 28px; border: 1px solid ${t.border}; background: ${t.bg}; color: ${t.text}; font-size: 12px; text-transform: none; letter-spacing: 0`"><option v-for="o in models" :value="o.id" :selected="o.on">{{o.label}}</option></select>
+      </label>
+      <button type="button" @click="ov.toggleSpot" :aria-pressed="ov.spotOn" class="lbl" :style="`height: 28px; padding: 0 10px; border: 1px solid ${t.border}; background: ${ov.spotOn ? t.surf2 : 'transparent'}; color: ${t.text2}; cursor: pointer`">{{ov.spotLabel}}</button>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: center; font-size: 12px; margin-bottom: 8px" :style="`color: ${t.text2}`">
+      <span style="display: flex; align-items: center; gap: 6px"><span :style="`width: 16px; height: 10px; background: ${t.band}`"></span>Likely range p10–p90</span>
+      <span style="display: flex; align-items: center; gap: 6px"><span :style="`width: 16px; border-top: 2px solid ${t.fc}`"></span>Best guess</span>
+      <span style="display: flex; align-items: center; gap: 6px"><span :style="`width: 16px; border-top: 2px solid ${t.act}`"></span>Actual (Fingrid)</span>
+      <span style="display: flex; align-items: center; gap: 6px"><span :style="`width: 2px; height: 12px; background: ${t.acc}`"></span>Control room time</span>
+      <span :style="`color: ${t.text3}`">Click anywhere on the chart to open that hour in the control room</span>
+    </div>
+    <div style="display: flex">
+      <div class="m" :style="`width: 56px; flex: none; position: relative; height: 320px; font-size: 12px; color: ${t.text3}`">
+        <span v-for="y in ov.yTicks" :style="`position: absolute; right: 8px; bottom: ${y.pos}; transform: translateY(50%)`">{{y.label}}</span>
+      </div>
+      <div style="flex: 1; min-width: 0; position: relative; height: 320px; cursor: crosshair" @mousemove="ov.move" @mouseleave="ov.leave" @click="ov.open">
+        <svg viewBox="0 0 1000 300" preserveAspectRatio="none" role="img" :aria-label="`Forecast made ${ov.lead} h ahead against the actual imbalance price, ${ov.title}`" style="position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible">
+          <line v-for="y in ov.yTicks" x1="0" x2="1000" :y1="y.y" :y2="y.y" :stroke="t.grid" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+          <line v-for="d in ov.dayLines" :x1="d.x" :x2="d.x" y1="0" y2="300" :stroke="t.grid" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+          <path :d="ov.paths.band" :fill="t.band"></path>
+          <path :d="ov.paths.spot" fill="none" :stroke="t.spot" stroke-width="1.25" stroke-dasharray="1 3" vector-effect="non-scaling-stroke"></path>
+          <path :d="ov.paths.p50" fill="none" :stroke="t.fc" stroke-width="1.5" vector-effect="non-scaling-stroke"></path>
+          <path :d="ov.paths.act" fill="none" :stroke="t.act" stroke-width="1.25" vector-effect="non-scaling-stroke"></path>
+          <line v-if="ov.nowX != null" :x1="ov.nowX" :x2="ov.nowX" y1="-6" y2="300" :stroke="t.acc" stroke-width="1.5" vector-effect="non-scaling-stroke"></line>
+          <line v-if="ov.hover" :x1="ov.hover.x" :x2="ov.hover.x" y1="0" y2="300" :stroke="t.text3" stroke-width="1" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"></line>
+        </svg>
+        <span v-if="ov.nowLeft" class="lbl" :style="`position: absolute; top: -18px; left: ${ov.nowLeft}; transform: translateX(-50%); color: ${t.acc}; white-space: nowrap; font-weight: 600`">{{ov.nowLabel}}</span>
+        <span v-if="ov.clipped" class="m" :style="`position: absolute; top: 4px; right: 6px; font-size: 12px; color: ${t.text3}; background: ${t.surf}; padding: 0 4px`">▲ {{ov.clipped}}</span>
+      </div>
+    </div>
+    <div style="display: flex; margin-top: 4px"><div style="width: 56px; flex: none"></div>
+      <div class="m" :style="`flex: 1; position: relative; height: 16px; font-size: 12px; color: ${t.text3}`"><span v-for="d in ov.dayLines" :style="`position: absolute; left: ${d.left}; white-space: nowrap`">{{d.label}}</span></div>
+    </div>
+    <div aria-live="polite" :style="`display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: baseline; min-height: 34px; margin-top: 8px; padding: 7px 12px; background: ${t.bg}; border: 1px solid ${t.grid}; font-size: 13px`">
+      <template v-if="ov.hover">
+        <strong class="m" style="font-weight: 600">{{ov.hover.time}}</strong>
+        <span><span :style="`color: ${t.text3}`">Actual</span> <span class="m">{{ov.hover.act}}</span></span>
+        <span><span :style="`color: ${t.text3}`">Best guess {{ov.lead}} h ahead</span> <span class="m" :style="`color: ${t.fc}`">{{ov.hover.fc}}</span></span>
+        <span><span :style="`color: ${t.text3}`">Range</span> <span class="m">{{ov.hover.range}}</span></span>
+        <span :style="`color: ${ov.hover.inside ? t.text2 : t.watch}`">{{ov.hover.inside ? 'inside the range' : 'outside the range'}}</span>
+      </template>
+      <span v-else :style="`color: ${t.text3}`">Hover the chart to read a quarter-hour · click to open it in the control room</span>
+    </div>
+  </section>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 14px">
+    <section aria-label="Scores for this period" class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 12px 16px`">
+      <h2 class="lbl" :style="`margin: 0 0 10px; font-weight: 600; color: ${t.text}`">This period · forecasts made {{ov.lead}} h ahead</h2>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px">
+        <thead><tr class="lbl" :style="`color: ${t.text3}; text-align: right`"><th style="text-align: left; font-weight: 500; padding: 4px 0">Model</th><th style="font-weight: 500">Avg miss</th><th style="font-weight: 500">In range</th><th style="font-weight: 500">Direction</th><th style="font-weight: 500">Spikes caught</th><th style="font-weight: 500">False alarms</th></tr></thead>
+        <tbody><tr v-for="r in ov.rows" class="m" :style="`border-top: 1px solid ${t.grid}; text-align: right; color: ${r.main ? t.text : t.text2}; font-weight: ${r.main ? 600 : 400}`">
+          <td style="text-align: left; padding: 6px 0; font-family: Inter, system-ui, sans-serif">{{r.name}}</td><td>{{r.mae}}</td><td>{{r.inR}}</td><td>{{r.dir}}</td><td>{{r.spikes}}</td><td>{{r.fa}}</td></tr></tbody>
+      </table>
+      <p :style="`margin: 10px 0 0; font-size: 12px; color: ${t.text3}`">In range: share of actual prices inside p10–p90 (aim 80%). Direction: the most likely regulation direction was right. Spikes: more than €50 above or below the day-ahead price, alarm at the tuned levels.</p>
+    </section>
+    <section aria-label="Accuracy by forecast hour" class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 12px 16px`">
+      <h2 class="lbl" :style="`margin: 0 0 10px; font-weight: 600; color: ${t.text}`">Avg miss by hours ahead · {{ov.modelName}} vs {{ov.refName}}</h2>
+      <div style="display: flex; flex-direction: column; gap: 5px">
+        <div v-for="h in ov.hours" style="display: grid; grid-template-columns: 40px minmax(0, 1fr) 128px; gap: 10px; align-items: center; font-size: 12px">
+          <span class="m" :style="`color: ${t.text3}`">{{h.label}}</span>
+          <span style="display: flex; flex-direction: column; gap: 2px"><span :style="`height: 6px; width: ${h.aw}; background: ${t.fc}`"></span><span :style="`height: 6px; width: ${h.bw}; background: ${t.spread}`"></span></span>
+          <span class="m" :style="`text-align: right; color: ${h.c}`">{{h.a}} · {{h.b}}</span>
+        </div>
+      </div>
+      <p :style="`margin: 10px 0 0; font-size: 12px; color: ${t.text3}`">Blue: {{ov.modelName}} · grey: {{ov.refName}}. Errors grow the further ahead the forecast is made.</p>
+    </section>
+    <section aria-label="Day by day" class="hud" :style="`background: ${t.surf}; border: 1px solid ${t.border}; padding: 12px 16px`">
+      <h2 class="lbl" :style="`margin: 0 0 10px; font-weight: 600; color: ${t.text}`">Day by day · {{ov.dayNote}}</h2>
+      <div :style="`position: relative; height: 90px; display: flex; gap: 2px; border-top: 1px solid ${t.grid}; border-bottom: 1px solid ${t.grid}`">
+        <div :style="`position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid ${t.border}`"></div>
+        <button v-for="b in ov.dayBars" type="button" @click="b.pick" :title="b.tip" :aria-label="b.tip" style="flex: 1; min-width: 0; position: relative; padding: 0; border: 0; background: transparent; cursor: pointer">
+          <span :style="`position: absolute; left: 1px; right: 1px; ${b.up ? 'bottom' : 'top'}: 50%; height: ${b.h}; background: ${b.c}`"></span>
+        </button>
+      </div>
+      <p :style="`margin: 10px 0 0; font-size: 12px; color: ${t.text3}`">Bars down (blue): {{ov.modelName}} missed by less than {{ov.refName}} that day; up (yellow): by more. Click a day to zoom in.</p>
+    </section>
+  </div>
+</main>
+<footer class="m" :style="`display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 12px; color: ${t.text3}; padding: 10px 24px 16px`">
+  <span>As of {{asOfLabel}} {{tzName}} · model {{model}} · made {{madeLabel}} · {{nextLabel}}</span>
+  <span>Times are delivery periods, start–end · ← → one hour</span>
+  <span style="flex-basis: 100%; font-family: Inter, system-ui, sans-serif">{{notice}}</span>
+</footer>
+</div>
+</script>
+<script>
+const D = __DATA__;
+
+class View { constructor(props) { this.props = props || {}; this.state = {}; }
+  setState(u) { const p = typeof u === 'function' ? u(this.state) : u; if (!p) return; this.state = Object.assign({}, this.state, p); __schedule(); } }
+
+const T = { bg:'#07090C', surf:'#0D1015', surf2:'#141920', border:'#252C36', grid:'#171C23', text:'#EDEFF2', text2:'#A9B1BC', text3:'#8A93A0',
+  acc:'#FF9F43', fc:'#5AA2FF', fcGlow:'transparent', band:'rgba(90,162,255,0.16)', bandPast:'rgba(138,147,160,0.14)', act:'#F4F6F8', spot:'#8A93A0', ghost:'#7A8390',
+  up:'#B794FF', down:'#2EC4B0', upSoft:'rgba(183,148,255,0.85)', downSoft:'rgba(46,196,176,0.85)', obsUp:'rgba(183,148,255,0.32)', obsDown:'rgba(46,196,176,0.32)',
+  rev:'#FF5C6C', revBg:'rgba(255,92,108,0.14)', revShade:'rgba(255,92,108,0.10)', watch:'#F2D16B', watchBg:'rgba(242,209,107,0.12)', watchShade:'rgba(242,209,107,0.05)', info:'#9FB1CC', infoBg:'rgba(159,177,204,0.12)',
+  hover:'rgba(237,239,242,0.06)', sel:'rgba(255,159,67,0.12)', selRing:'inset 0 0 0 1px #FF9F43', brush:'rgba(185,199,214,0.10)', brushEdge:'#B9C7D6', spread:'#4F5866', spreadHi:'#A9B1BC',
+  replayBg:'#16120C', shadow:'0 14px 36px rgba(0,0,0,0.6)', ok:'#3CCB7F', hitC:'rgba(237,239,242,0.24)', none:'rgba(237,239,242,0.06)' };
+// operator default: what a trader on shift needs; the rest sits behind Analyst tools
+const OPERATOR_LAYERS = ['range', 'fc', 'act', 'spot', 'up', 'down', 'high', 'low'];
+const LAYER_DEFAULT = { range: true, fc: true, prev: false, act: true, spot: true, vals: false, up: true, down: true, high: true, low: true, hits: false, cmp: false, spread: false, insights: true };
+const LAYER_SIMPLE = { range: true, fc: true, prev: false, act: true, spot: false, vals: false, up: false, down: false, high: true, low: true, hits: true, cmp: false, spread: false, insights: true };
+const LAYER_META = [
+  ['range', 'Range p10–p90', 'band'], ['fc', 'Best guess', 'fc'], ['prev', 'Previous update', 'prev'], ['act', 'Actual', 'act'], ['spot', 'Spot', 'spot'], ['vals', 'Values', 'vals'],
+  ['up', 'Up-regulation', 'up'], ['down', 'Down-regulation', 'down'], ['high', 'High-price risk', 'spike'], ['low', 'Low-price risk', 'low'],
+  ['hits', 'Hits & misses', 'hits'], ['cmp', 'Compare', 'cmp'], ['spread', 'Model spread', 'spread'], ['insights', 'Tooltip insights', 'ins']
+];
+// alarm levels tuned on the folds (config/alarm_levels_<variant>.json); alert thresholds for model spread and range width
+const ALARM = { high: D.alarm.high, low: D.alarm.low };
+const ALERT = { spread: 43.4, width: 155.5 };
+const PUB_DELAY = 90;   // minutes after a quarter-hour starts until Fingrid's price is usable (75–120 in the data)
+const GATE = 60;        // intraday gate closure, minutes before delivery
+const SIM = { from: 420, to: 1380 };
+const setSimDay = (d) => { SIM.from = d * 1440 + 420; SIM.to = Math.min(d * 1440 + 1380, D.hi); };
+setSimDay(D.dayFirst);   // live simulation: 07:00 to 23:00 of the chosen day
+const SIM_SPEEDS = [[1, '1 q/s'], [4, '1 h/s'], [10, '1 day/10 s']];
+const MODELS = D.modelList;
+const pad = (n) => String(n).padStart(2, '0');
+const eur = (v) => { const r = Math.round(v); return (r < 0 ? '−' : '') + Math.abs(r).toLocaleString('en-US'); };
+const pct = (p) => Math.round(p * 100) + '%';
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const YMAX = 400;
+const spark = (vals, lo, hi) => vals.map((v, i) => (i ? 'L' : 'M') + (i / (vals.length - 1) * 100).toFixed(2) + ' ' + (19 - clamp((v - lo) / ((hi - lo) || 1), 0, 1) * 18).toFixed(2)).join(' ');
+
+class Component extends View {
+  constructor(props) {
+    super(props);
+    const scn = props.scenario || 'high-risk';
+    const replay = scn === 'replay', simS = scn === 'simulation';
+    this.state = { asOf: simS ? SIM.from : D.dayFirst * 1440 + 720, past: replay, playing: replay, speed: 1, reveal: replay, tz: 'local', sel: 43, hover: null, freshOpen: scn === 'stale', open: {}, trustOpen: false, roMore: false,
+      layers: { ...LAYER_DEFAULT }, lead: 1, table: false, csvDone: false, main: 'combined_v3', cmp: 'A', tab: simS ? 'cr' : 'ov', ovFrom: D.dayFirst * 1440, ovTo: (D.dayLast + 1) * 1440, ovLead: 1, ovHover: null, ovSpot: false, hitsOpen: true, drag: null, brush: null,
+      sim: simS, simPlaying: simS, simSpeed: 4, pauseOnAlarm: true, simNote: '', analyst: false, ack: {}, snooze: {}, note: '', noteAt: null, pos: '-5', expoH: 4 };
+  }
+  componentDidMount() { this.sync(); }
+  componentDidUpdate() { this.sync(); }
+  componentWillUnmount() { if (this.timer) clearInterval(this.timer); }
+  sync() {
+    const st = this.state;
+    const want = st.sim && st.simPlaying ? 'sim' + st.simSpeed : st.playing && st.past ? 'rep' + st.speed : '';
+    if (want === this.timerKey) return;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null; this.timerKey = want;
+    if (!want) return;
+    if (st.sim) this.timer = setInterval(() => this.simTick(), 1000 / st.simSpeed);
+    else this.timer = setInterval(() => {
+      this.setState((s) => ({ asOf: s.asOf + 60 > D.hi ? D.lo : s.asOf + 60 }));
+    }, 1000 / st.speed);
+  }
+  // live simulation: the clock moves one quarter-hour per tick; a new forecast run every full hour
+  simTick() {
+    this.setState((s) => {
+      if (!s.sim) return {};
+      const n = s.asOf + 15;
+      if (n > SIM.to) return { simPlaying: false, simNote: 'End of the simulated day. Press Replay day to run it again.' };
+      const out = { asOf: n };
+      if (n % 60 === 0 && s.pauseOnAlarm) { const why = this.newAlarm(n); if (why) { out.simPlaying = false; out.simNote = 'Paused: ' + why + '. Read the alert, then press Play.'; } }
+      return out;
+    });
+  }
+  hmOf(m) { const utc = this.state.tz === 'utc'; const mm = ((m - (utc ? 180 : 0)) % 1440 + 1440) % 1440; return pad(Math.floor(mm / 60)) + ':' + pad(mm % 60); }
+  // peak spike risks of the run made at origin o, and the first quarter-hour above each alarm level
+  alarmsAt(o) {
+    const key = o + '|' + this.state.main + '|' + this.scn();
+    this._ac = this._ac || {};
+    if (this._ac[key]) return this._ac[key];
+    let hi = 0, lo = 0, hiAt = -1, loAt = -1;
+    for (let i = 0; i < 40; i++) { const m = o + 15 * i, f = this.fcM(m, o, this.state.main);
+      if (f.hi > hi) hi = f.hi; if (f.lo > lo) lo = f.lo; if (hiAt < 0 && f.hi > ALARM.high) hiAt = m; if (loAt < 0 && f.lo > ALARM.low) loAt = m; }
+    return (this._ac[key] = { hi, lo, hiAt, loAt });
+  }
+  // what is new in the run at o compared with the run an hour earlier: a new alarm, or a risk up 10 pp or more
+  newAlarm(o) {
+    const a = this.alarmsAt(o), b = this.alarmsAt(o - 60);
+    if (a.hiAt >= 0 && b.hiAt < 0) return 'new high-price risk alarm from ' + this.hmOf(a.hiAt) + ' (' + pct(a.hi) + ')';
+    if (a.hiAt >= 0 && a.hi >= b.hi + 0.10) return 'high-price risk up from ' + pct(b.hi) + ' to ' + pct(a.hi) + ' in the ' + this.hmOf(o) + ' run';
+    if (a.loAt >= 0 && b.loAt < 0) return 'new low-price risk alarm from ' + this.hmOf(a.loAt) + ' (' + pct(a.lo) + ')';
+    if (a.loAt >= 0 && a.lo >= b.lo + 0.10) return 'low-price risk up from ' + pct(b.lo) + ' to ' + pct(a.lo) + ' in the ' + this.hmOf(o) + ' run';
+    return '';
+  }
+  scn() { return ''; }
+  calm() { return false; }
+  qi(m) { return (m - D.qm0) / 15; }
+  spot(m) { const v = D.spot[this.qi(m)]; return v == null ? 0 : v; }
+  actual(m) { const v = D.act[this.qi(m)]; return v == null ? null : v; }
+  dirA(m) { const v = D.dir[this.qi(m)]; return v == null ? 0 : v; }   // Fingrid 369: 1 up, -1 down, 0 none
+  spk(m) { const v = D.spk[this.qi(m)]; return v == null ? 0 : v; }   // 1 high, -1 low spike vs the real spot
+  w(m) { return 0; }
+  dd(m) { return 0; }
+  model(id) { return MODELS.find((x) => x[0] === id) || MODELS[0]; }
+  fc(m, origin) { return this.fcM(m, origin, this.state.main); }
+  fcM(m, origin, id) {
+    const o = origin - (((origin % 60) + 60) % 60), key = id + '|' + o + '|' + m;
+    this._fc = this._fc || new Map();
+    const hit = this._fc.get(key); if (hit) return hit;
+    const oi = (o - D.om0) / 60, k = (m - o) / 15, a = D.models[id], s = this.spot(m);
+    const lead = clamp(Math.ceil((m - origin + 1) / 60), 1, 10);
+    let r;
+    if (!a || oi < 0 || oi >= D.no || k < 0 || k >= 40) r = { m, lead, s, p10: s, p50: s, p90: s, up: 0, down: 0, none: 1, hi: 0, lo: 0, rmin: s, rmax: s, drivers: [], missing: true };
+    else {
+      const b = (oi * 40 + k) * 7, p50 = a[b + 1] / 10, up = a[b + 3] / 1000, down = a[b + 4] / 1000;
+      let rmin = p50, rmax = p50;
+      D.members.forEach((id2) => { const v = D.models[id2][b + 1] / 10; if (v < rmin) rmin = v; if (v > rmax) rmax = v; });
+      r = { m, lead, s, p10: a[b] / 10, p50, p90: a[b + 2] / 10, up, down, none: Math.max(0, 1 - up - down), hi: a[b + 5] / 1000, lo: a[b + 6] / 1000, rmin, rmax, drivers: [] };
+    }
+    this._fc.set(key, r);
+    return r;
+  }
+  y(v) { return 300 - clamp(v, 0, YMAX) / YMAX * 300; }
+
+  renderVals() {
+    const st = this.state, scn = this.scn(), t = T;
+    // asOf is the clock (quarter-hours in the simulation); origin is the latest hourly forecast run
+    const asOf = st.asOf, origin = asOf - (asOf % 60), prevO = origin - 60, start = asOf - 360;
+    const utc = st.tz === 'utc';
+    const days = D.days;
+    const hm = (m) => { const mm = ((m - (utc ? 180 : 0)) % 1440 + 1440) % 1440; return pad(Math.floor(mm / 60)) + ':' + pad(mm % 60); };
+    const dayOf = (m) => days[Math.floor(m / 1440)] || days[1];
+    const tzName = utc ? 'UTC' : 'EEST';
+    const stale = false, offline = false, dim = false;
+
+    const steps = [], prev = [], recent = [], cmpS = [], cmpR = [];
+    const L = st.layers, lead = st.lead, mid = st.main, cid = st.cmp;
+    for (let i = 0; i < 40; i++) { const m = asOf + 15 * i; steps.push(this.fcM(m, origin, mid)); prev.push(this.fcM(m, prevO, mid)); cmpS.push(this.fcM(m, origin, cid)); }
+    // past side: each quarter-hour as forecast `lead` h ahead; its price exists only once Fingrid has published it
+    const known = (m) => m + PUB_DELAY <= asOf;
+    for (let r = 0; r < 24; r++) { const m = start + 15 * r; const f = this.fcM(m, m - 60 * (lead - 1), mid); f.known = known(m); f.actual = f.known ? this.actual(m) : null; recent.push(f); cmpR.push(this.fcM(m, m - 60 * (lead - 1), cid)); }
+    const X = (j) => j * 10 + 5;
+    const line = (arr, off, key) => { let d = '', pen = false; arr.forEach((p, k) => { const v = p[key]; if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(k + off) + ' ' + this.y(v).toFixed(1) + ' '; pen = true; }); return d; };
+    // the actual line split by outcome: inside the range, outside it (half-segments either side of each point)
+    const catLine = (arr, off, want) => { let d = ''; arr.forEach((p, k) => { if (p.actual == null) return; const inR = p.actual >= p.p10 && p.actual <= p.p90; if (inR !== want) return;
+      const pv = k > 0 && arr[k - 1].actual != null, nx = k + 1 < arr.length && arr[k + 1].actual != null, x0 = X(k + off), y0 = this.y(p.actual);
+      const ax = pv ? (X(k - 1 + off) + x0) / 2 : x0, ay = pv ? (this.y(arr[k - 1].actual) + y0) / 2 : y0, bx = nx ? (x0 + X(k + 1 + off)) / 2 : x0, by = nx ? (y0 + this.y(arr[k + 1].actual)) / 2 : y0;
+      d += 'M' + ax.toFixed(1) + ' ' + ay.toFixed(1) + 'L' + x0 + ' ' + y0.toFixed(1) + 'L' + bx.toFixed(1) + ' ' + by.toFixed(1); }); return d; };
+    const band = (arr, off) => arr.map((p, k) => (k ? 'L' : 'M') + X(k + off) + ' ' + this.y(p.p90).toFixed(1)).join(' ') + ' ' + arr.slice().reverse().map((p, k) => 'L' + X(arr.length - 1 - k + off) + ' ' + this.y(p.p10).toFixed(1)).join(' ') + ' Z';
+    let spotD = '';
+    for (let j = 0; j < 64; j++) { const m = start + 15 * j; spotD += (j ? 'L' : 'M') + (j * 10) + ' ' + this.y(this.spot(m)).toFixed(1) + ' H' + (j * 10 + 10) + ' '; }
+    const reveal = st.past && st.reveal;
+    const fut = steps.map((p) => ({ actual: this.actual(p.m) }));
+    const paths = {
+      band: L.range ? band(steps, 24) : '', bandPast: L.range ? band(recent, 0) : '', p50: L.fc ? line(steps, 24, 'p50') : '', p50Past: L.fc ? line(recent, 0, 'p50') : '', prev: L.prev ? line(prev, 24, 'p50') : '',
+      actual: L.act && !L.hits ? line(recent, 0, 'actual') : '', actOk: L.act && L.hits ? catLine(recent, 0, true) : '', actMiss: L.act && L.hits ? catLine(recent, 0, false) : '',
+      actualFuture: reveal && L.act ? line(fut, 24, 'actual') : '', spot: L.spot ? spotD : '',
+      cmp: L.cmp ? line(cmpR, 0, 'p50') + ' ' + line(cmpS, 24, 'p50') : ''
+    };
+    const offscale = [];
+    recent.forEach((p, r) => { if (p.actual != null && p.actual > YMAX) offscale.push({ left: ((r + 0.5) / 64 * 100) + '%', label: eur(p.actual) + ' €/MWh', c: t.act }); });
+    // publication gap: quarter-hours already over whose price is not public yet
+    const firstUnknown = recent.findIndex((p) => !p.known);
+    const gap = firstUnknown >= 0 ? [{ left: (firstUnknown / 64 * 100) + '%', width: ((24 - firstUnknown) / 64 * 100) + '%' }] : [];
+    // spikes on the price line: ○ caught by an alarm, ◆ missed (shape carries it, colour repeats it)
+    const markers = [];
+    if (L.act && (L.high || L.low)) recent.forEach((p, r) => {
+      if (p.actual == null) return;
+      const sk = this.spk(p.m), hiS = sk === 1, loS = sk === -1;
+      if (!((L.high && hiS) || (L.low && loS))) return;
+      const caughtM = hiS ? p.hi > ALARM.high : p.lo > ALARM.low;
+      markers.push({ left: ((r + 0.5) / 64 * 100) + '%', bottom: (clamp(p.actual, 0, YMAX) / YMAX * 100) + '%', caught: caughtM, missed: !caughtM });
+    });
+    if (reveal) fut.forEach((p, k) => { if (p.actual > YMAX) offscale.push({ left: ((k + 24.5) / 64 * 100) + '%', label: eur(p.actual) + ' actual', c: t.act }); });
+    steps.forEach((p, k) => { if (p.p90 > YMAX && k % 4 === 0) offscale.push({ left: ((k + 24.5) / 64 * 100) + '%', label: 'range to ' + eur(p.p90), c: t.fc }); });
+
+    // alerts
+    const win = (pred) => { let a = -1, b = -1; steps.forEach((p, i) => { if (pred(p, i)) { if (a < 0) a = i; b = i; } }); return a < 0 ? null : [a, b]; };
+    const wl = (w) => hm(steps[w[0]].m) + '–' + hm(steps[w[1]].m + 15);
+    const maxIn = (w, key, arr) => Math.max(...(arr || steps).slice(w[0], w[1] + 1).map((p) => p[key]));
+    const alerts = [];
+    const spikeW = win((p) => p.hi > ALARM.high);
+    const lowW = win((p) => p.lo > ALARM.low);
+    const spreadMax = Math.max(...steps.map((p) => p.rmax - p.rmin));
+    if (spikeW) {
+      const pk = maxIn(spikeW, 'hi'), pv = maxIn(spikeW, 'hi', prev);
+      const sp = Math.max(...steps.slice(spikeW[0], spikeW[1] + 1).map((p) => p.rmax - p.rmin));
+      alerts.push({ sev: 'review', pk, type: 'High-price risk', short: 'High-price risk rising, up to ' + pct(pk), w: spikeW, title: 'Risk of an exceptionally high price has increased for ' + wl(spikeW),
+        message: 'In the ' + hm(origin) + ' run the chance of a price more than €50 above spot passes the tuned alarm level (' + pct(ALARM.high) + ') in this window. Worth checking the production plan and the market position.',
+        prob: 'up to ' + pct(pk), change: (pk - pv >= 0 ? '+' : '−') + Math.abs(Math.round((pk - pv) * 100)) + ' pp', agree: 'spread €' + Math.round(sp), drivers: [],
+        check: 'Intraday position and flexible capacity for ' + wl(spikeW) + '. Is capacity free to offer to reserve markets?' });
+    }
+    if (lowW) {
+      const pk = maxIn(lowW, 'lo'), pv = maxIn(lowW, 'lo', prev);
+      alerts.push({ sev: 'review', pk, type: 'Low-price risk', short: 'Low-price risk, up to ' + pct(pk), w: lowW, title: 'Risk of an exceptionally low price for ' + wl(lowW),
+        message: 'The chance of a price more than €50 below spot passes the tuned alarm level (' + pct(ALARM.low) + ') in this window.',
+        prob: 'up to ' + pct(pk), change: (pk - pv >= 0 ? '+' : '−') + Math.abs(Math.round((pk - pv) * 100)) + ' pp', agree: 'spread €' + Math.round(Math.max(...steps.slice(lowW[0], lowW[1] + 1).map((p) => p.rmax - p.rmin))),
+        drivers: [], check: 'Whether flexible consumption could move into ' + wl(lowW) + '.' });
+    }
+    const conflictW = win((p) => p.rmax - p.rmin >= ALERT.spread && this.w(p.m) < 0.2);
+    if (conflictW) {
+      const i = Math.round((conflictW[0] + conflictW[1]) / 2);
+      alerts.push({ sev: 'watch', type: 'Conflicting signals', short: 'Models disagree', w: conflictW, title: 'Models disagree about ' + wl(conflictW),
+        message: 'Best guesses of the three models range from ' + eur(steps[i].rmin) + ' to ' + eur(steps[i].rmax) + ' €/MWh.',
+        prob: 'down ' + pct(maxIn(conflictW, 'down')), change: 'new', agree: 'spread €' + Math.round(steps[i].rmax - steps[i].rmin), drivers: [],
+        check: 'Whether a planned purchase in this window could wait for the next update.' });
+    }
+    const upW = win((p) => p.up >= 0.6);
+    if (upW) {
+      const pk = maxIn(upW, 'up'), pv = maxIn(upW, 'up', prev);
+      alerts.push({ sev: 'watch', pk, type: 'Up-regulation', short: 'Grid likely short of power (up-regulation)', w: upW, title: 'The grid will likely need more power, ' + wl(upW),
+        message: 'Up-regulation is the most likely outcome in every quarter-hour of this window. Imbalance prices then settle above spot.',
+        prob: 'up to ' + pct(pk), change: (pk - pv >= 0 ? '+' : '−') + Math.abs(Math.round((pk - pv) * 100)) + ' pp', agree: 'spread €' + Math.round(Math.max(...steps.slice(upW[0], upW[1] + 1).map((p) => p.rmax - p.rmin))), drivers: [],
+        check: 'Whether being short in this window is acceptable for the current plan.' });
+    }
+    let maxD = 0, maxDi = 0;
+    steps.forEach((p, i) => { const d = p.p50 - prev[i].p50; if (Math.abs(d) > Math.abs(maxD)) { maxD = d; maxDi = i; } });
+    if (Math.abs(maxD) >= 25) {
+      const chW = win((p, i) => Math.abs(p.p50 - prev[i].p50) >= 15);
+      alerts.push({ sev: 'watch', type: 'Forecast changed', short: 'Forecast raised since ' + hm(prevO), w: chW, title: 'Forecast ' + (maxD > 0 ? 'raised' : 'lowered') + ' by up to €' + Math.round(Math.abs(maxD)) + ' since the ' + hm(prevO) + ' update',
+        message: 'Best guess for ' + hm(steps[maxDi].m) + ' moved from ' + eur(prev[maxDi].p50) + ' to ' + eur(steps[maxDi].p50) + ' €/MWh between the ' + hm(prevO) + ' and the ' + hm(origin) + ' run.',
+        prob: '–', change: (maxD > 0 ? '+' : '−') + '€' + Math.round(Math.abs(maxD)), agree: '–', drivers: [],
+        check: 'Positions that were set before ' + hm(prevO + 60) + ' for this window.' });
+    }
+    if (stale) {
+      alerts.push({ sev: 'info', type: 'Data late', short: 'Wind data late, one source missing', w: [0, 39], title: 'Wind power forecast is 95 min late; cross-border capacity is missing',
+        message: 'The forecast uses the last wind forecast from 10:30 and assumes normal transmission capacity. Evening values may change when the data arrives.',
+        prob: '–', change: '–', agree: '–', drivers: ['Fingrid wind forecast', 'ENTSO-E capacities'], check: 'Data freshness list before acting on evening values.' });
+    }
+    const sevRank = { review: 0, watch: 1, info: 2 };
+    alerts.sort((a, b) => sevRank[a.sev] - sevRank[b.sev] || a.w[0] - b.w[0]);
+    const SEV = { review: ['Review', t.rev, t.revBg, t.revShade], watch: ['Watch', t.watch, t.watchBg, t.watchShade], info: ['Info', t.info, t.infoBg, 'transparent'] };
+    // trading window of an alert: quarter-hours starting less than GATE minutes from now are locked
+    const GQ = GATE / 15;
+    const actByOf = (w) => w[1] < GQ ? { text: 'Locked', trade: 'Already past gate closure: only the imbalance settlement remains.' }
+      : w[0] >= GQ ? { text: 'Act by ' + hm(steps[w[0]].m - GATE), trade: 'Whole window still tradable. The gate for ' + hm(steps[w[0]].m) + '–' + hm(steps[w[0]].m + 15) + ' closes at ' + hm(steps[w[0]].m - GATE) + '.' }
+      : { text: 'Act now', trade: 'First ' + (GQ - w[0]) + ' quarter-hour' + (GQ - w[0] > 1 ? 's' : '') + ' locked; from ' + hm(steps[GQ].m) + ' still tradable, its gate is closing now.' };
+    // acknowledged alarms go quiet, unless the risk has risen 10 pp or more since
+    const ackOf = (a) => { const r = st.ack[a.type]; if (!r) return { acked: false, reraise: false }; const up = a.pk != null && a.pk >= r.pk + 0.10; return { acked: !up, reraise: up, at: r.at, pk: r.pk }; };
+    const snoozedAll = alerts.filter((a) => st.snooze[a.type] != null && st.snooze[a.type] > asOf);
+    const shownAlerts = alerts.filter((a) => !snoozedAll.includes(a));
+    const isOpen = (a) => st.open[a.type] != null ? st.open[a.type] : a.sev === 'review' && !ackOf(a).acked;
+    const alertsOut = shownAlerts.map((a) => { const k = ackOf(a), loud = a.sev === 'review' && !k.acked, ab = actByOf(a.w); return { ...a, sevLabel: SEV[a.sev][0], fg: SEV[a.sev][1], bg: SEV[a.sev][2], border: loud ? SEV[a.sev][1] : t.border,
+      glow: loud ? '0 0 18px rgba(255,92,108,0.18)' : 'none', isReview: a.sev === 'review', isWatch: a.sev === 'watch', isInfo: a.sev === 'info',
+      titleW: loud ? 600 : 500, open: isOpen(a), chev: isOpen(a) ? 'rotate(180deg)' : 'none',
+      toggle: () => this.setState((s) => { const cur = s.open[a.type] != null ? s.open[a.type] : a.sev === 'review' && !ackOf(a).acked; return { open: { ...s.open, [a.type]: !cur } }; }),
+      window: a.w[0] === 0 && a.w[1] === 39 ? 'all 10 h' : wl(a.w), aria: SEV[a.sev][0] + (k.acked ? ', acknowledged' : '') + ': ' + a.title,
+      hasActBy: a.sev !== 'info', actBy: ab.text, trade: a.sev === 'info' ? 'Applies to the whole horizon.' : ab.trade,
+      acked: k.acked, ackAt: k.acked ? hm(k.at) : '', hasReraise: k.reraise, reraise: k.reraise ? 'Risk rose from ' + pct(k.pk) + ' to ' + pct(a.pk) + ' since it was acknowledged at ' + hm(k.at) + '.' : '',
+      ackLabel: k.acked ? 'Acknowledged ' + hm(k.at) : 'Acknowledge', ackBorder: loud ? t.rev : t.border,
+      ack: () => this.setState((s) => ({ ack: { ...s.ack, [a.type]: { at: s.asOf, pk: a.pk != null ? a.pk : 0 } }, open: { ...s.open, [a.type]: false } })),
+      snooze: () => this.setState((s) => ({ snooze: { ...s.snooze, [a.type]: s.asOf + 60 } })),
+      drivers: a.drivers.map((x) => ({ text: x })), focus: () => this.setState({ sel: 24 + Math.round((a.w[0] + a.w[1]) / 2) }) }; });
+    const unackedReview = alertsOut.some((a) => a.isReview && !a.acked);
+    const snoozedLabel = snoozedAll.length ? snoozedAll.length + ' snoozed: ' + snoozedAll.map((a) => a.type + ' until ' + hm(st.snooze[a.type])).join(', ') : '';
+    const shades = alerts.filter((a) => a.sev !== 'info').slice(0, 3).map((a) => ({ left: ((a.w[0] + 24) / 64 * 100) + '%', width: ((a.w[1] - a.w[0] + 1) / 64 * 100) + '%',
+      bg: SEV[a.sev][3], edge: a.sev === 'review' ? t.rev : 'transparent', fg: SEV[a.sev][1], label: a.sev === 'review' ? 'Review ' + wl(a.w) : '', cls: '' })).map((sh, i) => ({ ...sh, top: (4 + 16 * i) + 'px' }));
+    const shadesOut = shades.filter((s, i) => !(i > 0 && shades.slice(0, i).some((o) => o.left === s.left)));
+
+    // cells
+    const cells = [];
+    for (let j = 0; j < 64; j++) {
+      const isF = j >= 24, p = isF ? steps[j - 24] : recent[j];
+      const sel = j === st.sel, hov = j === st.hover;
+      let upH = '0%', downH = '0%', upC = t.upSoft, downC = t.downSoft;
+      if (isF) { upH = L.up ? (p.up * 50) + '%' : '0%'; downH = L.down ? (p.down * 50) + '%' : '0%'; }
+      else if (p.actual != null) { const dir = this.dirA(p.m); if (dir > 0) { upH = '50%'; upC = t.obsUp; } else if (dir < 0) { downH = '50%'; downC = t.obsDown; } }
+      const hiOn = isF && p.hi > ALARM.high, loOn = isF && p.lo > ALARM.low;
+      cells.push({ j, sel, bg: sel ? t.sel : st.brush && j >= st.brush[0] && j <= st.brush[1] ? t.brush : hov ? t.hover : 'transparent', ring: sel ? t.selRing : 'none',
+        upH, downH, upC, downC,
+        hiH: isF && L.high ? clamp(p.hi / 0.5 * 50, 0, 50) + '%' : '0%', loH: isF && L.low ? clamp(p.lo / 0.5 * 50, 0, 50) + '%' : '0%',
+        hiC: hiOn ? t.rev : t.upSoft, loC: loOn ? t.rev : t.downSoft,
+        hiAct: !isF && p.actual != null && L.high && this.spk(p.m) === 1 ? t.up : 'transparent', loAct: !isF && p.actual != null && L.low && this.spk(p.m) === -1 ? t.down : 'transparent',
+        sprH: isF ? clamp((p.rmax - p.rmin) / 120 * 100, 4, 100) + '%' : '0%', sprC: isF && (p.rmax - p.rmin) >= 60 ? t.spreadHi : t.spread,
+        aria: dayOf(p.m) + ' ' + hm(p.m) + (isF ? ': best guess ' + eur(p.p50) + ' €/MWh, range ' + eur(p.p10) + ' to ' + eur(p.p90) + ', high-price risk ' + pct(p.hi) : p.actual != null ? ': actual ' + eur(p.actual) + ' €/MWh' : ': price not published yet'),
+        enter: () => { const d = this.state.drag; if (d != null) this.setState({ hover: j, brush: [Math.min(d, j), Math.max(d, j)] }); else if (this.state.hover !== j) this.setState({ hover: j }); },
+        down: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ drag: j, brush: null }); },
+        up: () => { const b = this.state.brush; this.setState(b && b[1] > b[0] ? { drag: null } : { drag: null, brush: null, sel: j }); },
+        pick: () => { if (this.state.drag == null && !(this.state.brush && this.state.brush[1] > this.state.brush[0])) this.setState({ sel: j }); } });
+    }
+    // one builder for any quarter-hour j: used by the hover tooltip (compact, follows the chips) and the pinned bar (everything)
+    const slot = (j) => {
+      const isF = j >= 24, fp = isF ? steps[j - 24] : recent[j], fprev = isF ? prev[j - 24] : null;
+      const items = [];
+      const add = (on, k, v, c, core) => { if (on) items.push({ k, v, c, core: !!core }); };
+      if (isF) {
+        add(L.fc, 'Best guess', eur(fp.p50) + ' €/MWh', t.fc, true); add(L.range, 'Range', eur(fp.p10) + '–' + eur(fp.p90) + ' €/MWh', t.text, true);
+        add(L.spot, 'Spot', eur(fp.s) + ' €/MWh', t.text, true); add(L.up, '▲ Up', pct(fp.up), t.up); add(L.down, '▼ Down', pct(fp.down), t.down);
+        add(L.up || L.down, 'None', pct(fp.none), t.text); add(L.high, 'High-price risk', pct(fp.hi), fp.hi > ALARM.high ? t.rev : t.text, true);
+        add(L.low, 'Low-price risk', pct(fp.lo), fp.lo > ALARM.low ? t.rev : t.text, true); add(true, 'Models', eur(fp.rmin) + '–' + eur(fp.rmax), t.text);
+        add(L.prev, 'Was', eur(fprev.p50), t.text2); add(reveal && L.act, 'Actual', this.actual(fp.m) == null ? '–' : eur(this.actual(fp.m)), t.act, true);
+        add(L.cmp, this.model(cid)[1], eur(cmpS[j - 24].p50), t.text2, true);
+      } else {
+        add(L.act, 'Actual', fp.actual != null ? eur(fp.actual) + ' €/MWh' : 'not published yet', fp.actual != null ? t.act : t.text3, true);
+        add(L.fc, 'Forecast', eur(fp.p50), t.text, true); add(L.range, 'Range', eur(fp.p10) + '–' + eur(fp.p90) + ' €/MWh', t.text, true); add(L.spot, 'Spot', eur(fp.s) + ' €/MWh', t.text, true);
+        add(L.high, 'High-price risk', pct(fp.hi), fp.hi > ALARM.high ? t.rev : t.text); add(L.low, 'Low-price risk', pct(fp.lo), fp.lo > ALARM.low ? t.rev : t.text);
+        add(L.cmp, this.model(cid)[1], eur(cmpR[j].p50), t.text2, true);
+      }
+      // plain-language verdicts for a past quarter-hour; only with "Tooltip insights" on
+      const verdicts = [];
+      if (!isF && L.insights) {
+        const p = fp, y = p.actual, dirName = { 1: 'up-regulation', '-1': 'down-regulation', 0: 'no dominating direction' };
+        if (y == null) verdicts.push({ g: '!', c: t.watch, what: 'Actual', text: 'Not published yet: Fingrid publishes about ' + PUB_DELAY + ' min after the quarter-hour starts.' });
+        else {
+          if (y > p.p90) verdicts.push({ g: '✗', c: t.rev, what: 'Price', text: 'Actual ' + eur(y) + ' was ' + eur(y - p.p90) + ' above the range (' + eur(p.p10) + ' to ' + eur(p.p90) + '). Best guess ' + eur(p.p50) + '.' });
+          else if (y < p.p10) verdicts.push({ g: '✗', c: t.rev, what: 'Price', text: 'Actual ' + eur(y) + ' was ' + eur(p.p10 - y) + ' below the range (' + eur(p.p10) + ' to ' + eur(p.p90) + ').' });
+          else verdicts.push({ g: '✓', c: t.text, what: 'Price', text: 'Actual ' + eur(y) + ' was inside the range (' + eur(p.p10) + ' to ' + eur(p.p90) + '), ' + (y - p.p50 >= 0 ? '+' : '−') + eur(Math.abs(y - p.p50)) + ' from the best guess.' });
+          const da = this.dirA(p.m), g = p.up >= p.down && p.up >= p.none ? 1 : p.down >= p.none ? -1 : 0, pr = (d) => (d === 1 ? p.up : d === -1 ? p.down : p.none);
+          verdicts.push(g === da ? { g: '✓', c: t.text, what: 'Direction', text: dirName[da].charAt(0).toUpperCase() + dirName[da].slice(1) + ', as forecast (' + pct(pr(da)) + ' likely).' }
+            : { g: '✗', c: t.rev, what: 'Direction', text: dirName[da].charAt(0).toUpperCase() + dirName[da].slice(1) + ', but the forecast said ' + dirName[g] + ' (' + pct(pr(g)) + '; ' + pct(pr(da)) + ' for what happened).' });
+          const sk = this.spk(p.m), hiS = sk === 1, loS = sk === -1, ah = p.hi > ALARM.high, al = p.lo > ALARM.low;
+          if (hiS || loS) verdicts.push((hiS ? ah : al) ? { g: '✓', c: t.text, what: 'Spike', text: (hiS ? 'High' : 'Low') + '-price spike, caught: risk ' + pct(hiS ? p.hi : p.lo) + ', alarm above ' + pct(hiS ? ALARM.high : ALARM.low) + '.' }
+            : { g: '✗', c: t.rev, what: 'Spike', text: (hiS ? 'High' : 'Low') + '-price spike, missed: risk only ' + pct(hiS ? p.hi : p.lo) + ' (alarm above ' + pct(hiS ? ALARM.high : ALARM.low) + ').' });
+          else if (ah || al) verdicts.push({ g: '!', c: t.text3, what: 'Spike', text: 'False alarm: no spike, but the ' + (ah ? 'high-price risk was ' + pct(p.hi) : 'low-price risk was ' + pct(p.lo)) + '.' });
+          else verdicts.push({ g: '✓', c: t.text, what: 'Spike', text: 'No spike and no alarm (high ' + pct(p.hi) + ', low ' + pct(p.lo) + ').' });
+        }
+        verdicts.push({ g: '·', c: t.text3, what: 'Forecast', text: 'Made ' + hm(p.m - 60 * lead) + ', ' + lead + ' h before delivery · ' + this.model(mid)[1] + '.' });
+      }
+      return { p: fp, isF, time: dayOf(fp.m) + ' ' + hm(fp.m) + '–' + hm(fp.m + 15), kind: isF ? fp.lead + ' h ahead' : 'past · forecast ' + lead + ' h ahead', items, verdicts };
+    };
+    // pinned bar: the clicked quarter-hour, everything; it does not move while you hover
+    const pin = slot(st.sel);
+    const ro = { time: pin.time, kind: 'pinned · ' + pin.kind, items: pin.items };
+    ro.shown = st.roMore ? ro.items : ro.items.filter((it) => it.core);
+    const verdicts = pin.verdicts;
+    // hover tooltip: compact, next to the cursor, flips side near the right edge and avoids the point
+    let tip = { on: false };
+    if (st.hover != null && st.hover !== st.sel) {
+      const h = slot(st.hover), x = (st.hover + 0.5) / 64 * 100, yv = h.isF ? h.p.p50 : (h.p.actual != null ? h.p.actual : h.p.p50);
+      const high = clamp(yv, 0, YMAX) / YMAX > 0.55;
+      tip = { on: true, time: h.time, kind: h.kind, items: h.items.filter((it) => it.core).slice(0, 6), verdicts: h.verdicts.slice(0, 3), hasV: h.verdicts.length > 0,
+        left: x + '%', tx: x > 62 ? 'translateX(calc(-100% - 14px))' : 'translateX(14px)', top: high ? 'auto' : '6px', bottom: high ? '6px' : 'auto' };
+    }
+
+    // why
+    const sp = st.sel >= 24 ? steps[st.sel - 24] : recent[st.sel];
+    const maxC = Math.max(20, ...sp.drivers.map((d) => Math.abs(d.c)));
+    const why = { time: hm(sp.m) + '–' + hm(sp.m + 15), spot: eur(sp.s), p50: eur(sp.p50) + ' €/MWh',
+      sum: (sp.p50 - sp.s >= 0 ? '+' : '−') + Math.abs(Math.round(sp.p50 - sp.s)),
+      rows: !sp.drivers.length ? [{ label: 'Driver breakdown is not part of this build yet', feature: 'best guess = spot + model premium', value: '', left: '50%', width: '0%', color: t.fc }] : sp.drivers.map((d) => { const wv = Math.abs(d.c) / maxC * 50; return { label: d.label, feature: d.f, value: (d.c >= 0 ? '+' : '−') + Math.abs(Math.round(d.c)),
+        left: d.c >= 0 ? '50%' : (50 - wv) + '%', width: Math.max(wv, 0.8) + '%', color: d.c >= 0 ? t.fc : t.ghost }; }) };
+    const lo = Math.min(sp.p10, sp.rmin) - 10, hi = Math.max(sp.p90, sp.rmax) + 10, P = (v) => ((v - lo) / (hi - lo) * 100) + '%';
+    const spr = sp.rmax - sp.rmin;
+    const agree = { verdict: spr >= 60 ? 'No · wide disagreement' : spr >= 30 ? 'Partly · moderate spread' : 'Yes · close agreement', c: spr >= 60 ? t.watch : t.text,
+      range: eur(sp.rmin) + '–' + eur(sp.rmax) + ' €/MWh', spread: '€' + Math.round(spr),
+      bandL: P(sp.p10), bandW: ((sp.p90 - sp.p10) / (hi - lo) * 100) + '%', minL: P(sp.rmin), maxL: P(sp.rmax), p50L: P(sp.p50), axisMin: eur(lo), axisMax: eur(hi) };
+
+    // changes
+    let hiNow = 0, hiPrev = 0, p90d = 0;
+    steps.forEach((p, i) => { hiNow = Math.max(hiNow, p.hi); hiPrev = Math.max(hiPrev, prev[i].hi); p90d = Math.max(p90d, p.p90 - prev[i].p90); });
+    const changes = [
+      { label: 'Largest change in best guess', value: (maxD >= 0 ? '+' : '−') + '€' + Math.round(Math.abs(maxD)), c: Math.abs(maxD) >= 25 ? t.watch : t.text, detail: hm(steps[maxDi].m) + ': ' + eur(prev[maxDi].p50) + ' → ' + eur(steps[maxDi].p50) + ' €/MWh' },
+      { label: 'Peak high-price risk', value: pct(hiPrev) + ' → ' + pct(hiNow), c: hiNow > ALARM.high ? t.rev : t.text, detail: hiNow - hiPrev >= 0.05 ? 'Risk growing as delivery gets closer' : 'About the same as last hour' },
+      { label: 'Top of likely range (p90)', value: '+€' + Math.round(Math.max(0, p90d)), c: t.text, detail: p90d >= 20 ? 'Range widened upward in the evening' : 'Range about the same' } ];
+
+    // trust, from the data: range check and average miss over quarter-hours already published at asOf
+    const evalW = (fromM, toM, ld, id) => { let n = 0, inR = 0, ae = 0; for (let q = fromM; q < toM && q + PUB_DELAY <= asOf; q += 15) { const y = this.actual(q); if (y == null) continue; const f = this.fcM(q, q - 60 * (ld - 1), id); if (f.missing) continue; n++; ae += Math.abs(y - f.p50); if (y >= f.p10 && y <= f.p90) inR++; } return { n, inR: n ? inR / n : 0, mae: n ? ae / n : 0 }; };
+    const last24 = evalW(asOf - 1440, asOf, 1, mid).inR;
+    const level = spreadMax >= 60 || last24 < 0.65 ? 1 : 2;
+    const tl = ['Low', 'Medium', 'High'][level];
+    const reasons = [];
+    reasons.push(spreadMax >= 60 ? { text: 'Models disagree by up to €' + Math.round(spreadMax) } : { text: 'Models agree within €' + Math.round(spreadMax) });
+    reasons.push({ text: 'Range held for ' + pct(last24) + ' of quarter-hours in the last 24 h (aim 80%)' });
+    reasons.push({ text: 'Replay: inputs as they were published at the time' });
+    const bar = (n) => (level >= n ? t.text : t.border);
+    const trust = { label: tl, reasons, first: reasons[0].text, b1: t.text, b2: bar(1), b3: bar(2) };
+    const day0 = asOf - (asOf % 1440), covDays = [];
+    for (let d = 7; d >= 1; d--) { const e = evalW(day0 - d * 1440, day0 - (d - 1) * 1440, 1, mid); if (e.n) covDays.push([D.days[Math.floor((day0 - d * 1440) / 1440)] || '', e.inR]); }
+    const rc = { last24: pct(last24), c: last24 < 0.75 ? t.watch : t.text,
+      verdict: last24 < 0.75 ? 'Range too narrow lately: treat the upper bound with extra caution.' : 'Range has held about as designed.',
+      days: covDays.map(([d, v]) => ({ h: (v * 100) + '%', c: v < 0.8 ? t.watch : t.spread, tip: d + ': ' + pct(v) + ' inside' })) };
+    const e7 = evalW(asOf - 7 * 1440, asOf, 1, mid), e7r = evalW(asOf - 7 * 1440, asOf, 1, D.ref), e7l = evalW(asOf - 7 * 1440, asOf, 10, mid);
+    const acc = { h1: Math.round(e7.mae), h10: Math.round(e7l.mae), base: Math.round(e7r.mae), baseName: D.refName };
+
+    // summary
+    let summary;
+    const reviews = alerts.filter((a) => a.sev === 'review').sort((a, b) => parseInt(b.prob.replace(/\D/g, ''), 10) - parseInt(a.prob.replace(/\D/g, ''), 10));
+    const rv = reviews[0], kindOf = (a) => (a.type === 'Low-price risk' ? 'low-price risk' : 'high-price risk');
+    if (rv) summary = 'Check ' + wl(rv.w) + ': ' + kindOf(rv) + ' ' + rv.prob + (rv.type === 'High-price risk' && upW ? ', up-regulation likely.' : '.')
+      + (reviews[1] ? ' Also ' + wl(reviews[1].w) + ': ' + kindOf(reviews[1]) + ' ' + reviews[1].prob + '.' : '')
+      + (stale ? ' Wind data is late, so treat the evening with extra caution.' : '');
+    else if (alerts.length) summary = alerts.length + ' situation' + (alerts.length > 1 ? 's' : '') + ' to watch; no high-price risk in the next 10 hours.';
+    else summary = 'Nothing to act on: prices are expected to stay close to spot until ' + hm(asOf + 600) + '.';
+    if (rv) { const ab = actByOf(rv.w); summary += ab.text === 'Locked' ? ' Already past gate closure.' : ' ' + ab.text + '.'; }
+
+    // freshness: a replay shows every input as it was published at the time
+    const SRC = [['Fingrid imbalance price (319)', 'about 90 min after delivery starts'], ['Fingrid regulation direction (369)', 'about 90 min'], ['Fingrid wind and consumption forecasts', 'as published'], ['Day-ahead spot price', 'day before'], ['ENTSO-E transmission capacity', 'as published']];
+    const sources = SRC.map(([name, exp]) => ({ source: name, latest: 'as of ' + hm(asOf), age: 'replay', expected: exp, statusLabel: '✓ As published', color: t.text2 }));
+    const fresh = { label: 'Historical replay', isOk: true, isBad: false, fg: t.text2, bg: t.surf2, border: t.border, short: 'replay' };
+
+    // KPI strip
+    const s0 = steps[0];
+    // the first hour still open for intraday trading
+    const ntS = steps.slice(GATE / 15, GATE / 15 + 4), ntA = ntS[0], nt50 = ntS.reduce((u, p) => u + p.p50, 0) / 4, nt10 = Math.min(...ntS.map((p) => p.p10)), nt90 = Math.max(...ntS.map((p) => p.p90));
+    const up4 = steps.slice(0, 4).reduce((a, p) => a + p.up, 0) / 4, dn4 = steps.slice(0, 4).reduce((a, p) => a + p.down, 0) / 4;
+    const dirUp = up4 >= dn4, no4 = Math.max(0, 1 - up4 - dn4), noneTop = no4 > up4 && no4 > dn4;
+    const p50s = steps.map((p) => p.p50), pmin = Math.min(...p50s), pmax = Math.max(...p50s);
+    // usual range at this hour (switched off below: no such statistics in this replay)
+    const rangeOf = (v, lo, hi, a, b, fmt, unit) => { const P = (x) => clamp((x - a) / (b - a), 0, 1) * 100; const out = v > hi ? 'above usual' : v < lo ? 'below usual' : 'within usual';
+      return { rangeOn: true, bandL: P(lo) + '%', bandW: (P(hi) - P(lo)) + '%', markL: P(v) + '%', markC: v > hi || v < lo ? t.watch : t.text, rangeC: v > hi || v < lo ? t.watch : t.text3,
+        rangeLabel: out + ' · usual ' + fmt(lo) + '–' + fmt(hi) + unit, rangeAria: 'Current ' + fmt(v) + unit + ', ' + out + ' (' + fmt(lo) + ' to ' + fmt(hi) + unit + ' at this hour)' }; };
+    const spH = Math.max(1, Math.abs(s0.s));
+    const kpis = [
+      { label: 'Next tradable hour', value: eur(nt50), unit: '€/MWh', sub: hm(ntA.m) + '–' + hm(ntA.m + 60) + ' · range ' + eur(nt10) + '–' + eur(nt90) + ' €/MWh' + (dim ? ' · verify inputs' : ''), c: dim ? t.text3 : t.text, alarm: false, ...rangeOf(nt50, ntA.s - 8, ntA.s + 40, ntA.s - 40, ntA.s + 160, eur, '') },
+      { label: D.spotLabel, value: eur(s0.s), unit: '€/MWh', sub: 'day-ahead · premium ' + (s0.p50 - s0.s >= 0 ? '+' : '−') + Math.abs(Math.round(s0.p50 - s0.s)), c: t.text, alarm: false, ...rangeOf(s0.s, spH * 0.7, spH * 1.35, 0, spH * 2, eur, '') },
+      { label: 'Direction · next hour', value: noneTop ? 'None ' + pct(no4) : (dirUp ? '▲ Up ' : '▼ Down ') + pct(dirUp ? up4 : dn4), unit: '', sub: noneTop ? 'up ' + pct(up4) + ' · down ' + pct(dn4) : (dirUp ? 'down ' + pct(dn4) : 'up ' + pct(up4)) + ' · none ' + pct(no4), c: noneTop ? t.text : dirUp ? t.up : t.down, alarm: false, ...rangeOf(up4, 0.35, 0.55, 0, 1, (x) => Math.round(x * 100), '% up') },
+      { label: 'Peak high-price risk', value: pct(hiNow), unit: '', sub: spikeW ? wl(spikeW) + ' · was ' + pct(hiPrev) : 'none above alert level', c: hiNow > ALARM.high ? t.rev : t.text, alarm: hiNow > ALARM.high && unackedReview, ...rangeOf(hiNow, 0.04, 0.12, 0, 0.5, (x) => Math.round(x * 100), '%') },
+      { label: 'Trust', value: tl, unit: '', sub: reasons[0].text, c: level === 0 ? t.rev : level === 1 ? t.watch : t.text, alarm: false, rangeOn: false },
+      { label: 'Data', value: fresh.short, unit: '', sub: offline ? 'waiting for connection' : 'next update ' + hm(asOf + 60), c: fresh.isOk ? t.ok : t.watch, alarm: false, rangeOn: false }
+    ];
+
+    kpis.forEach((k) => { k.rangeOn = false; });   // no 'usual range' statistics in this build
+    // ticker
+    const ticker = [];
+    if (stale) ticker.push({ m: origin - 5, tag: 'Data', c: t.watch, text: 'Wind forecast 95 min late · ENTSO-E capacity missing' });
+    ticker.push({ m: origin + 2, tag: 'Run', c: t.text2, text: 'Forecast ' + D.modelTag + ' complete · 40 quarter-hours to ' + hm(origin + 600) });
+    alerts.forEach((a) => ticker.push({ m: origin + 2, tag: SEV[a.sev][0], c: SEV[a.sev][1], text: a.short + ' · ' + (a.w[0] === 0 && a.w[1] === 39 ? 'all 10 h' : wl(a.w)) }));
+    ticker.push({ m: origin + 2, tag: 'Risk', c: hiNow > ALARM.high ? t.rev : t.text2, text: 'Peak high-price risk ' + pct(hiPrev) + ' → ' + pct(hiNow) });
+    ticker.push({ m: origin - 45, tag: 'Check', c: rc.c, text: 'Range check last 24 h: ' + rc.last24 + ' inside (aim 80%)' });
+
+    const isLive = !st.past && !st.sim, sim = st.sim;
+    // late inputs grey the forecast itself, not only the badge
+    const fcC = dim ? t.text3 : t.fc, bandC = dim ? 'rgba(138,147,160,0.12)' : t.band;
+    const trade = { lockW: (GATE / 15 / 64 * 100) + '%', gateL: ((24 + GATE / 15) / 64 * 100) + '%', label: dim ? 'Verify first' : 'Tradable from ' + hm(asOf + GATE), c: dim ? t.watch : t.text,
+      note: dim ? 'inputs are late: check data freshness before trading on this run' : 'intraday gate closes ' + GATE + ' min before delivery',
+      aria: 'Delivered up to ' + hm(asOf) + ', locked until ' + hm(asOf + GATE) + ', tradable after that' };
+
+    // exposure: expected imbalance volume times (imbalance price minus spot)
+    const posN = parseFloat(st.pos), qv = isFinite(posN) ? posN : 0, nH = st.expoH * 4;
+    let e50 = 0, eLo = 0, eHi = 0, eLock = 0;
+    steps.slice(0, nH).forEach((p, i) => { const a = qv * (p.p10 - p.s), b = qv * (p.p90 - p.s), c = qv * (p.p50 - p.s); e50 += c; eLo += Math.min(a, b); eHi += Math.max(a, b); if (i < GATE / 15) eLock += c; });
+    const money = (v) => (Math.round(v) < 0 ? '−' : Math.round(v) > 0 ? '+' : '') + '€' + Math.abs(Math.round(v)).toLocaleString('en-US');
+    const expo = { q: st.pos, setQ: (e) => { const v = e && e.target ? e.target.value : ''; this.setState({ pos: v }); },
+      hs: [2, 4, 10].map((h, i) => ({ label: h + ' h', on: st.expoH === h, sep: i ? t.border : 'transparent', bg: st.expoH === h ? t.acc : 'transparent', fg: st.expoH === h ? '#07090C' : t.text2, pick: () => this.setState({ expoH: h }) })),
+      side: qv < 0 ? 'Short ' + Math.abs(qv) + ' MWh per quarter-hour: you buy the missing energy at the imbalance price.' : qv > 0 ? 'Long ' + qv + ' MWh per quarter-hour: you sell the surplus at the imbalance price.' : 'Balanced: nothing is settled at the imbalance price.',
+      p50: money(e50), c: e50 < -500 ? t.watch : t.text, range: money(eLo) + ' to ' + money(eHi), horizon: hm(asOf) + '–' + hm(asOf + st.expoH * 60),
+      tradable: money(e50 - eLock) + ' from ' + hm(asOf + GATE) + ' can still be hedged · ' + money(eLock) + ' is locked',
+      note: (dim ? 'Inputs are late, so treat these amounts with caution. ' : '') + 'Compared with settling the same energy at spot. The range adds the quarter-hour ranges, so it overstates the spread. In the build the volume comes from the balance plan.' };
+
+    // live simulation scorecard: every quarter-hour since the start whose price is published, judged
+    // against the latest forecast made before its delivery started (the run at the start of its hour)
+    const SC = [];
+    let sN = 0, sAe = 0, sAeR = 0, sIn = 0, sDir = 0, sSp = 0, sCa = 0, sFa = 0;
+    if (sim) for (let qq = SIM.from; qq + PUB_DELAY <= asOf; qq += 15) {
+      const y = this.actual(qq); if (y == null) continue;
+      const o = qq - (qq % 60), f = this.fcM(qq, o, mid), fr = this.fcM(qq, o, D.ref), sk = this.spk(qq), da = this.dirA(qq);
+      sN++; sAe += Math.abs(y - f.p50); sAeR += Math.abs(y - fr.p50); if (y >= f.p10 && y <= f.p90) sIn++;
+      const g = f.up >= f.down && f.up >= f.none ? 1 : f.down >= f.none ? -1 : 0; if (g === da) sDir++;
+      const al = sk > 0 ? f.hi > ALARM.high : sk < 0 ? f.lo > ALARM.low : (f.hi > ALARM.high || f.lo > ALARM.low);
+      if (sk) { sSp++; if (al) sCa++; } else if (al) sFa++;
+    }
+    if (sN) SC.push({ k: 'Published', v: sN + ' quarter-hours', c: t.text }, { k: 'Avg miss', v: '€' + Math.round(sAe / sN) + ' (' + D.refName + ' €' + Math.round(sAeR / sN) + ')', c: sAe <= sAeR ? t.text : t.watch },
+      { k: 'In range', v: pct(sIn / sN) + ' · aim 80%', c: sIn / sN < 0.7 ? t.watch : t.text }, { k: 'Direction right', v: pct(sDir / sN), c: t.text },
+      { k: 'Spikes', v: sSp ? sCa + ' of ' + sSp + ' caught' : 'none yet', c: sSp && sCa < sSp ? t.rev : t.text }, { k: 'False alarms', v: String(sFa), c: t.text });
+    else SC.push({ k: 'Waiting', v: 'the first price is published ' + PUB_DELAY + ' min after its quarter-hour starts', c: t.text2 });
+    const atEnd = asOf >= SIM.to;
+    const simOut = { caption: dayOf(asOf) + ' · clock ' + hm(asOf) + ' · forecast run ' + hm(origin) + ' · each price appears ' + PUB_DELAY + ' min after its quarter-hour starts',
+      playText: st.simPlaying ? '❚❚ Pause' : atEnd ? '↺ Replay day' : '▶ Play', playLabel: st.simPlaying ? 'Pause simulation' : 'Play simulation',
+      play: () => this.setState((s) => (s.simPlaying ? { simPlaying: false } : s.asOf >= SIM.to ? { simPlaying: true, simNote: '', asOf: SIM.from, ack: {}, snooze: {} } : { simPlaying: true, simNote: '' })),
+      restart: () => this.setState({ asOf: SIM.from, simPlaying: false, simNote: '', ack: {}, snooze: {} }),
+      back15: () => this.setState((s) => ({ asOf: Math.max(SIM.from, s.asOf - 15), simPlaying: false })),
+      fwd15: () => this.setState((s) => ({ asOf: Math.min(SIM.to, s.asOf + 15), simPlaying: false })),
+      speeds: SIM_SPEEDS.map(([v, label]) => ({ label, on: st.simSpeed === v, bg: st.simSpeed === v ? t.surf2 : 'transparent', pick: () => this.setState({ simSpeed: v }) })),
+      pauseOnAlarm: st.pauseOnAlarm, togglePause: () => this.setState((s) => ({ pauseOnAlarm: !s.pauseOnAlarm })),
+      min: SIM.from, max: SIM.to, clock: asOf, clockLabel: dayOf(asOf) + ' ' + hm(asOf),
+      scrub: (e) => { const v = e && e.target ? parseInt(e.target.value, 10) : NaN; if (isFinite(v)) this.setState({ asOf: v - (v % 15), simPlaying: false }); },
+      fromLabel: hm(SIM.from), toLabel: hm(SIM.to), score: SC, hasNote: !!st.simNote, note: st.simNote };
+    const maxAsOf = D.hi;
+
+    // layer chips (the legend is the toggle)
+    const SW = { band: ['10px', t.band, '0'], fc: ['0', 'transparent', '2px solid ' + t.fc], prev: ['0', 'transparent', '2px dashed ' + t.ghost], act: ['0', 'transparent', '2px solid ' + t.act],
+      spot: ['0', 'transparent', '1px dotted ' + t.spot], vals: ['10px', 'rgba(90,162,255,0.35)', '0'], up: ['10px', t.up, '0'], down: ['10px', t.down, '0'], spike: ['10px', t.rev, '0'], low: ['10px', t.downSoft, '0'],
+      hits: ['10px', t.hitC, '0'], cmp: ['0', 'transparent', '2px dotted ' + t.info], spread: ['10px', t.spread, '0'], ins: ['10px', t.surf2, '0'] };
+    const setLayers = (o) => this.setState({ layers: o });
+    const chips = LAYER_META.filter(([k]) => st.analyst || OPERATOR_LAYERS.includes(k)).map(([k, label0, sw]) => ({ label: k === 'cmp' ? 'Compare: ' + this.model(cid)[1] : label0, on: !!L[k], border: L[k] ? t.border : t.grid, bg: L[k] ? t.surf2 : 'transparent', fg: L[k] ? t.text : t.text3,
+      swH: SW[sw][0], swBg: SW[sw][1], swLine: SW[sw][2], swOp: L[k] ? 1 : 0.35, toggle: () => this.setState((s) => ({ layers: { ...s.layers, [k]: !s.layers[k] } })) }));
+
+    // lead selector for the past side
+    const leads = [1, 2, 4, 10].map((v, i) => ({ label: v + ' h', on: lead === v, sep: i ? t.border : 'transparent', bg: lead === v ? t.acc : 'transparent', fg: lead === v ? '#07090C' : t.text2, pick: () => this.setState({ lead: v }) }));
+
+    // hits & misses: past side, judged against forecasts made `lead` hours ahead
+    const dirOf = (p) => (p.up >= p.down && p.up >= p.none ? 1 : p.down >= p.none ? -1 : 0);
+    const priceC = [], dirC = [], spkC = [];
+    let nP = 0, nD = 0, spikes = 0, caught = 0, falseAl = 0;
+    for (let j = 0; j < 64; j++) {
+      if (j >= 24) { priceC.push({ c: t.none, tip: 'not known yet' }); dirC.push({ c: t.none, tip: 'not known yet' }); spkC.push({ c: t.none, tip: 'not known yet' }); continue; }
+      const p = recent[j], when = hm(p.m);
+      if (p.actual == null) { priceC.push({ c: t.none, tip: when + ': price not published yet' }); dirC.push({ c: t.none, tip: when + ': not published yet' }); spkC.push({ c: t.none, tip: when + ': not published yet' }); continue; }
+      const inR = p.actual >= p.p10 && p.actual <= p.p90; if (inR) nP++;
+      priceC.push({ c: inR ? t.hitC : t.rev, tip: when + (inR ? ': inside the range' : ': outside the range') });
+      const sk = this.spk(p.m), da = this.dirA(p.m), ok = dirOf(p) === da; if (ok) nD++;
+      dirC.push({ c: ok ? t.hitC : t.rev, tip: when + (ok ? ': direction right' : ': direction wrong') });
+      const sAct = sk !== 0, sAl = sk > 0 ? p.hi > ALARM.high : sk < 0 ? p.lo > ALARM.low : (p.hi > ALARM.high || p.lo > ALARM.low);
+      if (sAct) spikes++; if (sAct && sAl) caught++; if (!sAct && sAl) falseAl++;
+      spkC.push({ c: sAct && sAl ? t.text : sAct ? t.rev : sAl ? t.spread : t.hitC, tip: when + (sAct && sAl ? ': spike caught' : sAct ? ': spike missed' : sAl ? ': false alarm' : ': no spike, no alarm') });
+    }
+    const nK = recent.filter((p) => p.actual != null).length;
+    const hitRows = [
+      { name: 'In range', score: nK ? pct(nP / nK) + ' (' + nP + '/' + nK + ')' : '–', cells: priceC },
+      { name: 'Direction', score: nK ? pct(nD / nK) + ' (' + nD + '/' + nK + ')' : '–', cells: dirC },
+      { name: 'Spikes', score: spikes ? caught + '/' + spikes + ' caught' + (falseAl ? ' · ' + falseAl + ' false' : '') : (falseAl ? falseAl + ' false alarms' : 'none, no alarms'), cells: spkC } ];
+
+    // value labels on the best-guess line, one per hour
+    const valueLabels = L.vals && L.fc ? steps.filter((p, k) => k % 4 === 0 && p.p50 <= YMAX).map((p) => { const k = steps.indexOf(p); return { left: ((k + 24.5) / 64 * 100) + '%', bottom: (clamp(p.p50, 0, YMAX) / YMAX * 100) + '%', text: eur(p.p50) }; }) : [];
+
+    // day navigator: actual per hour, only once it was known
+    const wFrom = asOf - 360, wTo = asOf + 600;
+    const nav = Array.from({ length: 24 }, (_, h) => {
+      const m0 = (asOf - (asOf % 1440)) + h * 60, known = m0 + 45 + PUB_DELAY <= asOf || reveal;
+      let sum = 0, spk = false, nA = 0;
+      for (let q = 0; q < 4; q++) { const m = m0 + 15 * q, a = this.actual(m); if (a == null) continue; sum += a; nA++; if (this.spk(m)) spk = true; }
+      const avg = sum / Math.max(1, nA), off = st.sim ? m0 < SIM.from || m0 > SIM.to : m0 < D.lo || m0 > maxAsOf, cur = m0 === origin;
+      return { label: h % 3 === 0 ? hm(m0).slice(0, 2) : '', h: known ? clamp(avg / YMAX * 100, 6, 100) + '%' : '0%', c: spk ? t.rev : t.spread, op: known ? 1 : 0,
+        win: m0 + 60 > wFrom && m0 < wTo ? 'rgba(255,159,67,0.08)' : 'transparent', under: cur ? t.acc : 'transparent', cur, off, cursor: off ? 'default' : 'pointer', lc: cur ? t.acc : t.text3,
+        aria: hm(m0) + (known ? ': actual average ' + eur(avg) + ' €/MWh' + (spk ? ', spike hour' : '') : ': not known yet') + (off ? '' : '. Review as of this hour'),
+        pick: () => { if (off) return; if (this.state.sim) this.setState({ asOf: m0, simPlaying: false }); else this.setState({ asOf: m0, playing: false }); } };
+    });
+
+    // table view: every value the chart draws
+    const tableRows = steps.map((p) => ({ time: hm(p.m) + '–' + hm(p.m + 15), p10: eur(p.p10), p50: eur(p.p50), p90: eur(p.p90), spot: eur(p.s), up: pct(p.up), down: pct(p.down), hi: pct(p.hi), lo: pct(p.lo), hiC: p.hi > ALARM.high ? t.rev : t.text, loC: p.lo > ALARM.low ? t.rev : t.text }));
+    // window selected by dragging across the chart
+    let brushSum = { on: false };
+    if (st.brush && st.brush[1] > st.brush[0]) {
+      const [a, b] = st.brush, pts = []; for (let j = a; j <= b; j++) pts.push(j >= 24 ? { f: true, p: steps[j - 24] } : { f: false, p: recent[j] });
+      const fut = pts.filter((x) => x.f).map((x) => x.p), past = pts.filter((x) => !x.f && x.p.actual != null).map((x) => x.p);
+      const avg = (arr, k) => arr.reduce((u, p) => u + p[k], 0) / arr.length, mx = (arr, k) => Math.max(...arr.map((p) => p[k]));
+      const items = [];
+      if (fut.length) {
+        items.push({ k: 'Best guess', v: 'avg ' + eur(avg(fut, 'p50')) + ' · peak ' + eur(mx(fut, 'p50')), c: t.text });
+        items.push({ k: 'Range top', v: eur(mx(fut, 'p90')), c: t.text });
+        const nHi = fut.filter((p) => p.hi > ALARM.high).length, nLo = fut.filter((p) => p.lo > ALARM.low).length;
+        items.push({ k: 'High-price risk', v: 'peak ' + pct(mx(fut, 'hi')) + (nHi ? ' · ' + nHi + ' above alarm' : ''), c: nHi ? t.rev : t.text });
+        if (nLo) items.push({ k: 'Low-price risk', v: 'peak ' + pct(mx(fut, 'lo')) + ' · ' + nLo + ' above alarm', c: t.rev });
+        const u = avg(fut, 'up'), d = avg(fut, 'down');
+        items.push({ k: 'Direction', v: u >= d ? '▲ up ' + pct(u) + ' avg' : '▼ down ' + pct(d) + ' avg', c: u >= d ? t.up : t.down });
+      }
+      if (past.length) {
+        const inR = past.filter((p) => p.actual >= p.p10 && p.actual <= p.p90).length;
+        items.push({ k: 'Actual', v: 'avg ' + eur(avg(past, 'actual')) + ' · max ' + eur(mx(past, 'actual')), c: t.act });
+        items.push({ k: 'Inside range', v: inR + '/' + past.length, c: inR / past.length < 0.8 ? t.watch : t.text });
+      }
+      const m0 = (a >= 24 ? steps[a - 24] : recent[a]).m, m1 = (b >= 24 ? steps[b - 24] : recent[b]).m + 15;
+      brushSum = { on: true, label: hm(m0) + '–' + hm(m1), n: (b - a + 1) + ' quarter-hours', items, left: (a / 64 * 100) + '%', width: ((b - a + 1) / 64 * 100) + '%' };
+    }
+
+    // Fingrid real-time balance (datasets 186 and 209) is not part of this replay
+    const nowDir = dirUp ? 'up' : 'down';
+    const grid = { ok: false, state: 'Not in this replay', stateC: t.text3, dot: t.text3, cum: '–', cumC: t.text3, short: '–', bars: [],
+      note: 'Fingrid real-time balance (datasets 186 and 209) is not part of this historical replay. Forecast for the next hour: ' + (noneTop ? 'no dominating direction (' + pct(no4) + ').' : nowDir + ' ' + pct(dirUp ? up4 : dn4) + '.') };
+
+    // event log, latest first: static, five rows; in the simulation built from what has happened so far
+    const evs = [];
+    if (sim) {
+      for (let o = SIM.from; o <= origin; o += 60) {
+        evs.push({ m: o + 2, tag: 'Run', c: t.text2, text: 'Forecast run ' + hm(o) + ' complete · to ' + hm(o + 600) });
+        const na = o > SIM.from ? this.newAlarm(o) : '';
+        if (na) evs.push({ m: o + 2, tag: 'Alarm', c: t.rev, text: na.charAt(0).toUpperCase() + na.slice(1) });
+      }
+      for (let qq = SIM.from; qq + PUB_DELAY <= asOf; qq += 15) {
+        const y = this.actual(qq), sk = this.spk(qq);
+        if (y == null || !sk) continue;
+        const f = this.fcM(qq, qq - (qq % 60), mid), ok = sk > 0 ? f.hi > ALARM.high : f.lo > ALARM.low;
+        evs.push({ m: qq + PUB_DELAY, tag: 'Price', c: ok ? t.text : t.rev, text: hm(qq) + '–' + hm(qq + 15) + ' published at ' + eur(y) + ' €/MWh · ' + (sk > 0 ? 'high' : 'low') + ' spike ' + (ok ? 'caught ○' : 'missed ◆') });
+      }
+    } else evs.push(...ticker);
+    Object.keys(st.ack).forEach((k) => evs.push({ m: st.ack[k].at, tag: 'Ack', c: t.text2, text: k + ' acknowledged' }));
+    if (st.noteAt != null) evs.push({ m: st.noteAt, tag: 'Note', c: t.text2, text: 'Shift handover note updated' });
+    const events = evs.sort((a, b) => b.m - a.m).slice(0, 5).map((e) => ({ ...e, time: hm(e.m) }));
+
+    const ytk = [0, 100, 200, 300, 400];
+
+    return {
+      t, tzName, model: D.modelTag, dataTag: D.tag, notice: D.notice,
+      dayOpts: Array.from({ length: D.dayLast - D.dayFirst + 1 }, (_, i) => { const d = D.dayFirst + i; return { v: d, label: D.days[d], on: d === Math.floor(asOf / 1440) }; }),
+      pickDay: (e) => { const d = parseInt(e && e.target ? e.target.value : '', 10); if (!isFinite(d)) return; setSimDay(d); this.setState((s) => ({ asOf: s.sim ? SIM.from : d * 1440 + 720, simPlaying: false, simNote: '', ack: {}, snooze: {}, brush: null })); }, asOfLabel: dayOf(asOf) + ' ' + hm(asOf), asOfShort: hm(asOf), asOfBorder: st.past || st.sim ? t.acc : t.border,
+      madeLabel: hm(origin + 2), nextLabel: offline ? 'next update: waiting for connection' : st.sim ? 'simulation · next run ' + hm(origin + 60) : st.past ? 'replay · next step ' + hm(asOf + 60) : 'next update ' + hm(asOf + 60), nextShort: hm(origin + 60), prevShort: hm(prevO),
+      horizonLabel: hm(asOf) + '–' + hm(asOf + 600), nowLabel: (st.sim ? 'Sim ' : st.past ? 'As of ' : 'Now ') + hm(asOf),
+      back: () => this.setState((s) => (s.sim ? { asOf: Math.max(SIM.from, s.asOf - 60), simPlaying: false } : { asOf: Math.max(D.lo, s.asOf - 60), playing: false })),
+      fwd: () => this.setState((s) => { if (s.sim) return { asOf: Math.min(SIM.to, s.asOf + 60), simPlaying: false }; return { asOf: Math.min(maxAsOf, s.asOf + 60) }; }),
+      fwdDisabled: st.sim ? st.asOf >= SIM.to : st.asOf >= maxAsOf, fwdColor: t.text,
+      isLive, isPast: st.past, liveBg: isLive ? t.surf2 : 'transparent', liveFg: isLive ? t.text : t.text2, liveDot: isLive && !offline ? t.ok : t.text3, liveCls: '', isSim: st.sim, simBg: st.sim ? t.surf2 : 'transparent', simFg: st.sim ? t.acc : t.text2, sim: simOut,
+      replayBg: st.past ? t.surf2 : 'transparent', replayFg: st.past ? t.acc : t.text2,
+      goLive: () => this.setState((s) => ({ past: false, sim: false, simPlaying: false, playing: false, asOf: s.asOf - (s.asOf % 60) })),
+      goReplay: () => this.setState((s) => ({ past: true, playing: true, sim: false, simPlaying: false, asOf: clamp(s.asOf - (s.asOf % 60), D.lo, D.hi) })),
+      goSim: () => { setSimDay(Math.floor(this.state.asOf / 1440)); this.setState({ sim: true, past: false, playing: false, asOf: SIM.from, simPlaying: true, simNote: '', ack: {}, snooze: {} }); },
+      playLabel: st.playing ? 'Pause replay' : 'Play replay', playText: st.playing ? '❚❚ Pause' : '▶ Play', togglePlay: () => this.setState((s) => ({ playing: !s.playing })),
+      speeds: [1, 2, 6].map((v) => ({ label: v + ' h/s', on: st.speed === v, bg: st.speed === v ? t.surf2 : 'transparent', pick: () => this.setState({ speed: v }) })),
+      reveal: st.reveal, toggleReveal: () => this.setState((s) => ({ reveal: !s.reveal })),
+      offline, freshOpen: st.freshOpen, toggleFresh: () => this.setState((s) => ({ freshOpen: !s.freshOpen })), fresh, sources,
+      isLocal: !utc, isUtc: utc, tzLocalBg: !utc ? t.surf2 : 'transparent', tzUtcBg: utc ? t.surf2 : 'transparent', tzLocal: () => this.setState({ tz: 'local' }), tzUtc: () => this.setState({ tz: 'utc' }),
+      summary, trust, acc, kpis, ticker,
+      yTicks: ytk.map((v) => ({ pos: (v / YMAX * 100) + '%', label: v })), gridLines: [100, 200, 300].map((v) => ({ y: this.y(v) })),
+      xTicks: (() => { const off = ((60 - asOf % 60) % 60) / 15, out = []; for (let c = off; c <= 64; c += 4) out.push({ left: (c / 64 * 100) + '%', label: hm(start + 15 * c), c: c === 24 ? t.acc : t.text3, tx: c === 0 ? 'none' : c >= 64 ? 'translateX(-100%)' : 'translateX(-50%)' }); return out; })(),
+      paths, offscale, shades: shadesOut, cells, ro, leave: () => this.setState({ hover: null, drag: null }),
+      chartAria: 'Forecast of the imbalance price for ' + hm(asOf) + ' to ' + hm(asOf + 600) + ', with the last 6 hours of actual prices. Best guess ranges from ' + eur(pmin) + ' to ' + eur(pmax) + ' €/MWh.',
+      alerts: alertsOut, noAlerts: alertsOut.length === 0,
+      alertCountLabel: alertsOut.length ? ['review', 'watch', 'info'].map((s) => { const n = alertsOut.filter((a) => a.sev === s).length; return n ? n + ' ' + SEV[s][0].toLowerCase() : ''; }).filter(Boolean).join(' · ') : 'none',
+      why, agree, changes, rc,
+      trustOpen: st.trustOpen, toggleTrust: () => this.setState((s) => ({ trustOpen: !s.trustOpen })), trustBtn: st.trustOpen ? 'Hide' : 'Details',
+      tip, brushSum, grid, clearBrush: () => this.setState({ brush: null }),
+      chips, leads, hitRows, valueLabels, nav, tableRows, gap, markers, verdicts, hasVerdicts: verdicts.length > 0,
+      models: MODELS.map(([id, label]) => ({ id, label, on: id === mid, bg: id === mid ? t.surf2 : 'transparent', fg: id === mid ? t.text : t.text2, pick: () => this.setState({ main: id }) })),
+      cmpModels: MODELS.filter(([id]) => id !== mid).map(([id, label]) => ({ id, label, on: id === cid, bg: id === cid ? t.surf2 : 'transparent', fg: id === cid ? t.text : t.text2, pick: () => this.setState({ cmp: id, layers: { ...this.state.layers, cmp: true } }) })),
+      mainLabel: this.model(mid)[1], cmpOn: !!L.cmp,
+      pickMainEv: (e) => { const v = e && e.target ? e.target.value : null; if (v) this.setState((s) => ({ main: v, cmp: s.cmp === v ? (v === 'baseline' ? 'combined_v3' : 'baseline') : s.cmp })); },
+      pickCmpEv: (e) => { const v = e && e.target ? e.target.value : null; if (v) this.setState((s) => ({ cmp: v, layers: { ...s.layers, cmp: true } })); },
+      hitsOpen: st.hitsOpen, hitsClosed: !st.hitsOpen, toggleHits: () => this.setState((s) => ({ hitsOpen: !s.hitsOpen })), hitsTitle: st.hitsOpen ? '▾ Hits & misses' : '▸ Hits & misses',
+      alarmHiTop: (50 - ALARM.high / 0.5 * 50) + '%', alarmLoTop: (50 + ALARM.low / 0.5 * 50) + '%', alarmLabel: 'alarm ' + pct(ALARM.high) + ' / ' + pct(ALARM.low) + ' (tuned)', navDay: dayOf(asOf).split(' ').slice(0, 2).join(' '),
+      layerDir: !!(L.up || L.down), layerSpike: !!(L.high || L.low), layerHits: !!L.hits, layerSpread: !!L.spread,
+      presetSimple: () => setLayers({ ...LAYER_SIMPLE }), presetAll: () => setLayers(Object.fromEntries(LAYER_META.map(([k]) => [k, true]))),
+      pastLabel: 'Last 6 h · actual vs ' + lead + ' h ahead', leadShort: lead + ' h',
+      tableOn: st.table, tableBg: st.table ? t.surf2 : 'transparent', toggleTable: () => this.setState((s) => ({ table: !s.table })),
+      exportCsv: () => { const rows = [['delivery_start_local', 'p10', 'p50', 'p90', 'spot', 'p_up', 'p_down', 'p_spike_high', 'p_spike_low']].concat(steps.map((p) => [dayOf(p.m) + ' ' + hm(p.m), p.p10, p.p50, p.p90, p.s, p.up, p.down, p.hi, p.lo]));
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([rows.map((r) => r.join(',')).join('\n')], { type: 'text/csv' })); a.download = 'forecast_' + dayOf(origin).replace(/ /g, '_') + '_' + hm(origin).replace(':', '') + '.csv'; a.click(); }, csvLabel: 'CSV',
+      roMore: st.roMore, toggleRo: () => this.setState((s) => ({ roMore: !s.roMore })), roBtn: st.roMore ? 'Fewer' : 'All values',
+      analyst: st.analyst, toggleAnalyst: () => this.setState((s) => ({ analyst: !s.analyst })), analystLabel: st.analyst ? 'Analyst tools ▾' : 'Analyst tools ▸', analystBg: st.analyst ? t.surf2 : 'transparent',
+      fcC, bandC, trade, dim, expo, events,
+      hasSnoozed: snoozedLabel !== '', snoozedLabel, unsnooze: () => this.setState({ snooze: {} }),
+      note: st.note, setNote: (e) => { const v = e && e.target ? e.target.value : ''; this.setState((s) => ({ note: v, noteAt: s.asOf })); },
+      noteMeta: st.noteAt != null ? 'Last edited ' + hm(st.noteAt) + ' · kept in this browser tab only' : 'Kept in this browser tab only'
+    };
+  }
+}
+
+const OV = {};
+const niceStep = (r) => { const p = Math.pow(10, Math.floor(Math.log10(r))), f = r / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; };
+function ovStats(C, from, to, lead, id) {
+  let n = 0, ae = 0, inR = 0, dirOk = 0, sp = 0, ca = 0, fa = 0;
+  for (let m = from; m < to; m += 15) {
+    const y = C.actual(m); if (y == null) continue;
+    const f = C.fcM(m, m - 60 * (lead - 1), id); if (f.missing) continue;
+    const sk = C.spk(m), da = C.dirA(m), g = f.up >= f.down && f.up >= f.none ? 1 : f.down >= f.none ? -1 : 0;
+    n++; ae += Math.abs(y - f.p50); if (y >= f.p10 && y <= f.p90) inR++; if (g === da) dirOk++;
+    const al = sk > 0 ? f.hi > ALARM.high : sk < 0 ? f.lo > ALARM.low : (f.hi > ALARM.high || f.lo > ALARM.low);
+    if (sk) { sp++; if (al) ca++; } else if (al) fa++;
+  }
+  return { n, mae: n ? ae / n : NaN, inR: n ? inR / n : NaN, dir: n ? dirOk / n : NaN, sp, ca, fa };
+}
+function ovCompute(C) {
+  const st = C.state, t = T, from = st.ovFrom, to = st.ovTo, L = st.ovLead, id = st.main;
+  const key = [from, to, L, id, st.ovSpot].join('|');
+  if (OV.key === key) return OV.val;
+  const pts = [];
+  for (let m = from; m < to; m += 15) pts.push({ m, y: C.actual(m), f: C.fcM(m, m - 60 * (L - 1), id), s: C.spot(m) });
+  let lo = 0, hi = 100;
+  pts.forEach((p) => { if (!p.f.missing) { lo = Math.min(lo, p.f.p10); hi = Math.max(hi, p.f.p90); } if (p.y != null) { lo = Math.min(lo, p.y); hi = Math.max(hi, p.y); } });
+  lo = Math.max(lo, -250); hi = Math.min(hi, 450);
+  const step = niceStep((hi - lo) / 4); lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  const W = 1000, H = 300, X = (m) => ((m - from) / (to - from) * W).toFixed(1), Y = (v) => (H - (clamp(v, lo, hi) - lo) / (hi - lo) * H).toFixed(1);
+  const ok = pts.filter((p) => !p.f.missing);
+  const band = ok.length ? ok.map((p, i) => (i ? 'L' : 'M') + X(p.m) + ' ' + Y(p.f.p90)).join('') + ok.slice().reverse().map((p) => 'L' + X(p.m) + ' ' + Y(p.f.p10)).join('') + 'Z' : '';
+  const line = (get) => { let d = '', pen = false; pts.forEach((p) => { const v = get(p); if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(p.m) + ' ' + Y(v); pen = true; }); return d; };
+  const span = to - from, every = span > 20 * 1440 ? 3 : span > 9 * 1440 ? 2 : 1;
+  const dayLines = [];
+  for (let d = Math.ceil(from / 1440); d * 1440 < to; d++) dayLines.push({ x: X(d * 1440), left: ((d * 1440 - from) / span * 100) + '%', label: (d - Math.ceil(from / 1440)) % every === 0 ? (D.days[d] || '') : '' });
+  if (span <= 1440) { dayLines.length = 0; for (let h = 0; h <= 24; h += 3) dayLines.push({ x: X(from + h * 60), left: (h / 24 * 100) + '%', label: pad(h % 24) + ':00' }); }
+  const yTicks = []; for (let v = lo; v <= hi + 1e-9; v += step) yTicks.push({ y: Y(v), pos: ((v - lo) / (hi - lo) * 100) + '%', label: eur(v) });
+  const above = pts.filter((p) => p.y != null && p.y > hi).length, below = pts.filter((p) => p.y != null && p.y < lo).length;
+  const ids = MODELS.map((x) => x[0]).filter((x) => ['combined_v3', 'A', 'hack', 'baseline'].includes(x) || x === id).filter((x, i, a) => a.indexOf(x) === i);
+  const rows = ids.map((x) => { const s = ovStats(C, from, to, L, x); return { id: x, name: C.model(x)[1], mae: '€' + s.mae.toFixed(1), inR: pct(s.inR), dir: pct(s.dir), spikes: s.sp ? s.ca + ' of ' + s.sp : '–', fa: String(s.fa), main: x === id, raw: s }; });
+  const byHour = Array.from({ length: 10 }, (_, k) => { const a = ovStats(C, from, to, k + 1, id), b = ovStats(C, from, to, k + 1, D.ref); return { h: k + 1, a: a.mae, b: b.mae }; });
+  const hMax = Math.max(...byHour.map((r) => Math.max(r.a, r.b)));
+  const hours = byHour.map((r) => ({ label: r.h + ' h', a: '€' + r.a.toFixed(1), b: '€' + r.b.toFixed(1), aw: (r.a / hMax * 100) + '%', bw: (r.b / hMax * 100) + '%', c: r.a <= r.b ? t.text : t.watch }));
+  const days = [];
+  for (let d = Math.floor(from / 1440); d * 1440 < to; d++) { const a = ovStats(C, d * 1440, d * 1440 + 1440, L, id), b = ovStats(C, d * 1440, d * 1440 + 1440, L, D.ref); if (a.n) days.push({ d, label: D.days[d] || '', diff: a.mae - b.mae }); }
+  const dMax = Math.max(5, ...days.map((x) => Math.abs(x.diff)));
+  const better = days.filter((x) => x.diff < 0).length;
+  const dayBars = days.map((x) => ({ h: (Math.abs(x.diff) / dMax * 50) + '%', up: x.diff > 0, c: x.diff <= 0 ? t.fc : t.watch, tip: x.label + ': ' + C.model(id)[1] + ' ' + (x.diff <= 0 ? 'better' : 'worse') + ' than ' + D.refName + ' by €' + Math.abs(x.diff).toFixed(1) + ' avg miss',
+    pick: () => C.setState({ ovFrom: x.d * 1440, ovTo: x.d * 1440 + 1440 }) }));
+  OV.key = key;
+  OV.val = { pts, from, to, lo, hi, X, paths: { band, p50: line((p) => (p.f.missing ? null : p.f.p50)), act: line((p) => p.y), spot: st.ovSpot ? line((p) => p.s) : '' },
+    yTicks, dayLines, clipped: (above ? above + ' quarter-hours above €' + eur(hi) : '') + (above && below ? ' · ' : '') + (below ? below + ' below €' + eur(lo) : ''),
+    rows, hours, dayBars, dayNote: days.length ? C.model(id)[1] + ' beat ' + D.refName + ' on ' + better + ' of ' + days.length + ' days' : '' };
+  return OV.val;
+}
+function ovVals(C) {
+  const st = C.state, t = T, hm = (m) => pad(Math.floor((((m % 1440) + 1440) % 1440) / 60)) + ':' + pad(m % 60);
+  const tabs = { tab: st.tab, setTab: (k) => C.setState({ tab: k }), tabOvFg: st.tab === 'ov' ? t.text : t.text2, tabCrFg: st.tab === 'cr' ? t.text : t.text2,
+    tabOvLine: st.tab === 'ov' ? t.acc : 'transparent', tabCrLine: st.tab === 'cr' ? t.acc : 'transparent', setTabOv: () => C.setState({ tab: 'ov' }), setTabCr: () => C.setState({ tab: 'cr' }) };
+  if (st.tab !== 'ov') return { ...tabs, ov: null };
+  const v = ovCompute(C), span = v.to - v.from, first = D.dayFirst * 1440, last = (D.dayLast + 1) * 1440;
+  const dayOf = (m) => D.days[Math.floor(m / 1440)] || '';
+  const setWin = (a, b) => { const w = b - a; if (a < first) { a = first; b = a + w; } if (b > last) { b = last; a = Math.max(first, b - w); } C.setState({ ovFrom: a, ovTo: b }); };
+  const dNow = Math.floor(st.asOf / 1440) * 1440;
+  const H = D.headline, B = H.B, rel = (a, b) => Math.round((1 - b / a) * 100) + '%';
+  const head = [
+    { label: 'Accuracy · avg miss', value: '€' + B.mae_p50.toFixed(1), sub: rel(H.baseline.mae_p50, B.mae_p50) + ' better than the official baseline (€' + H.baseline.mae_p50.toFixed(1) + ') · A €' + H.A.mae_p50.toFixed(1) + ' · hackathon €' + H.hack.mae_p50.toFixed(1) },
+    { label: 'Range · pinball p10/p90', value: B.calibration_pinball_mean.toFixed(2), sub: rel(H.baseline.calibration_pinball_mean, B.calibration_pinball_mean) + ' better than baseline (' + H.baseline.calibration_pinball_mean.toFixed(2) + ') · ' + pct(B.coverage_p10_p90) + ' of prices inside, aim 80%' },
+    { label: 'Spikes · Brier', value: B.brier_spike_mean.toFixed(4), sub: rel(H.baseline.brier_spike_mean, B.brier_spike_mean) + ' better than baseline (' + H.baseline.brier_spike_mean.toFixed(4) + ') · A ' + H.A.brier_spike_mean.toFixed(4) },
+    { label: 'Direction · Brier', value: B.brier_direction.toFixed(3), sub: rel(H.baseline.brier_direction, B.brier_direction) + ' better than baseline (' + H.baseline.brier_direction.toFixed(3) + ') · A ' + H.A.brier_direction.toFixed(3) } ];
+  let hover = null;
+  if (st.ovHover != null) { const p = v.pts[Math.round((st.ovHover - v.from) / 15)]; if (p) hover = { time: dayOf(p.m) + ' ' + hm(p.m) + '–' + hm(p.m + 15), act: p.y == null ? 'not published' : eur(p.y) + ' €/MWh',
+    fc: p.f.missing ? '–' : eur(p.f.p50) + ' €/MWh', range: p.f.missing ? '–' : eur(p.f.p10) + '–' + eur(p.f.p90), inside: p.y != null && !p.f.missing && p.y >= p.f.p10 && p.y <= p.f.p90, x: v.X(p.m) }; }
+  const nowIn = st.asOf >= v.from && st.asOf < v.to;
+  return { ...tabs, ov: { ...v, head, hover, nowX: nowIn ? v.X(st.asOf) : null, nowLeft: nowIn ? ((st.asOf - v.from) / span * 100) + '%' : null, nowLabel: (st.sim ? 'Sim ' : 'As of ') + dayOf(st.asOf) + ' ' + hm(st.asOf),
+    title: span <= 1440 ? dayOf(v.from) : dayOf(v.from) + ' – ' + dayOf(v.to - 1), lead: st.ovLead, modelName: C.model(st.main)[1], refName: D.refName, spotOn: st.ovSpot, spotLabel: D.share ? 'Spot (synthetic)' : 'Spot',
+    presets: [['Month', first, last], ['Week', Math.max(first, dNow - 3 * 1440), Math.max(first, dNow - 3 * 1440) + 7 * 1440], ['Day', dNow, dNow + 1440]].map(([label, a, b]) => ({ label, on: v.from === Math.max(first, a) && v.to === Math.min(last, b), pick: () => setWin(a, b) })),
+    leads: [1, 2, 4, 10].map((x) => ({ label: x + ' h', on: st.ovLead === x, pick: () => C.setState({ ovLead: x }) })),
+    prev: () => setWin(v.from - span, v.to - span), next: () => setWin(v.from + span, v.to + span), toggleSpot: () => C.setState((s) => ({ ovSpot: !s.ovSpot })),
+    move: (e) => { const r = e.currentTarget.getBoundingClientRect(); const m = v.from + Math.floor(clamp((e.clientX - r.left) / r.width, 0, 0.9999) * span / 15) * 15; if (m !== st.ovHover) C.setState({ ovHover: m }); },
+    leave: () => C.setState({ ovHover: null }),
+    open: (e) => { const r = e.currentTarget.getBoundingClientRect(); const m = v.from + clamp((e.clientX - r.left) / r.width, 0, 0.9999) * span; const a = clamp(m - (m % 60), D.lo, D.hi);
+      C.setState({ tab: 'cr', asOf: a, sim: false, simPlaying: false, past: false, playing: false, sel: 24 }); } } };
+}
+
+const __comp = new Component({ scenario: new URLSearchParams(location.search).get('scenario') || '' });
+const __R = Vue.shallowReactive({});
+let __queued = false;
+function __schedule() { if (__queued) return; __queued = true; queueMicrotask(() => { __queued = false; Object.assign(__R, __comp.renderVals(), ovVals(__comp)); __comp.componentDidUpdate(); }); }
+Object.assign(__R, __comp.renderVals(), ovVals(__comp));
+Vue.createApp({ template: document.getElementById('tpl').textContent, setup() { return __R; } }).mount('#app');
+__comp.componentDidMount();
+window.addEventListener('keydown', (e) => { if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return; if (e.key === 'ArrowLeft') __R.back(); if (e.key === 'ArrowRight' && !__R.fwdDisabled) __R.fwd(); });
+</script>
+</body>
+</html>

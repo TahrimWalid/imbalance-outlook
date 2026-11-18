@@ -1,0 +1,219 @@
+{
+  "clim": {
+    "bucket_edges": [
+      4,
+      12,
+      24
+    ],
+    "state": "prem_sign",
+    "hour_group": 3,
+    "weekend": true,
+    "min_rows": 1000
+  },
+  "sarimax": {
+    "p": 4,
+    "q": 0,
+    "k_fourier": 0,
+    "clip": 200.0,
+    "window": 384
+  },
+  "timesfm": {
+    "context": 2048,
+    "target": "premium",
+    "covariates": true,
+    "xreg_mode": "xreg + timesfm"
+  },
+  "xgb": {
+    "p50": {
+      "n_estimators": 197,
+      "learning_rate": 0.05587597056204751,
+      "max_depth": 7,
+      "min_child_weight": 271.57524233844026,
+      "subsample": 0.7203959358323443,
+      "colsample_bytree": 0.49653397546764894,
+      "reg_lambda": 0.005553830935354555,
+      "reg_alpha": 78.63106278888482
+    },
+    "p10": {
+      "n_estimators": 415,
+      "learning_rate": 0.05458414414926579,
+      "max_depth": 3,
+      "min_child_weight": 448.00009385602107,
+      "subsample": 0.7047753443806314,
+      "colsample_bytree": 0.744725214366457,
+      "reg_lambda": 8.239692712171962,
+      "reg_alpha": 18.63935552098073
+    },
+    "p90": {
+      "n_estimators": 135,
+      "learning_rate": 0.15973277637925473,
+      "max_depth": 4,
+      "min_child_weight": 178.98222834601629,
+      "subsample": 0.5093936144437612,
+      "colsample_bytree": 0.4115066945674739,
+      "reg_lambda": 8.493994379669088,
+      "reg_alpha": 17.467965373260256
+    },
+    "spike_high": {
+      "n_estimators": 205,
+      "learning_rate": 0.05904358730116592,
+      "max_depth": 3,
+      "min_child_weight": 8.256334422232644,
+      "subsample": 0.7273548973165517,
+      "colsample_bytree": 0.624723358764077,
+      "reg_lambda": 2.7456665997930143,
+      "reg_alpha": 0.017037962587212466
+    },
+    "spike_low": {
+      "n_estimators": 137,
+      "learning_rate": 0.05298608968153491,
+      "max_depth": 4,
+      "min_child_weight": 354.5137393575339,
+      "subsample": 0.7609241608750359,
+      "colsample_bytree": 0.5902633579933665,
+      "reg_lambda": 0.021027036109989305,
+      "reg_alpha": 7.433073841273531
+    },
+    "dir": {
+      "n_estimators": 261,
+      "learning_rate": 0.034981572615383365,
+      "max_depth": 3,
+      "min_child_weight": 31.740363686507727,
+      "subsample": 0.7677148752378218,
+      "colsample_bytree": 0.6142033370659458,
+      "reg_lambda": 0.4318310640090672,
+      "reg_alpha": 0.4517571385049827
+    }
+  },
+  "lgbm": {
+    "p50": {
+      "n_estimators": 145,
+      "learning_rate": 0.04236978257956209,
+      "num_leaves": 13,
+      "min_child_samples": 337,
+      "subsample": 0.9062461321858346,
+      "colsample_bytree": 0.6763954818048346,
+      "reg_lambda": 75.25643497240927,
+      "reg_alpha": 64.11122390001394
+    },
+    "p10": {
+      "n_estimators": 157,
+      "learning_rate": 0.03928496589039931,
+      "num_leaves": 11,
+      "min_child_samples": 1382,
+      "subsample": 0.8598334361538627,
+      "colsample_bytree": 0.6096044599147338,
+      "reg_lambda": 0.009002228101039388,
+      "reg_alpha": 1.5972387408802067
+    },
+    "p90": {
+      "n_estimators": 112,
+      "learning_rate": 0.05082631246856131,
+      "num_leaves": 8,
+      "min_child_samples": 174,
+      "subsample": 0.7794002338346121,
+      "colsample_bytree": 0.5745645000395053,
+      "reg_lambda": 17.158522275102243,
+      "reg_alpha": 13.862683736409208
+    },
+    "spike_high": {
+      "n_estimators": 140,
+      "learning_rate": 0.07035565640130055,
+      "num_leaves": 9,
+      "min_child_samples": 136,
+      "subsample": 0.6879350716659698,
+      "colsample_bytree": 0.8357433369454023,
+      "reg_lambda": 3.082825973146235,
+      "reg_alpha": 2.827322246069656
+    },
+    "spike_low": {
+      "n_estimators": 343,
+      "learning_rate": 0.040703831474345045,
+      "num_leaves": 8,
+      "min_child_samples": 259,
+      "subsample": 0.8060478613612108,
+      "colsample_bytree": 0.7318537978123298,
+      "reg_lambda": 52.32875384294802,
+      "reg_alpha": 2.5650834317709905
+    },
+    "dir": {
+      "n_estimators": 126,
+      "learning_rate": 0.02698462101194835,
+      "num_leaves": 9,
+      "min_child_samples": 53,
+      "subsample": 0.8518404844275547,
+      "colsample_bytree": 0.811235795449164,
+      "reg_lambda": 0.1292249048074591,
+      "reg_alpha": 39.212675825320055
+    }
+  },
+  "qrf": {
+    "n_estimators": 200,
+    "min_samples_leaf": 9,
+    "max_features": 0.23107395509296208,
+    "max_samples_leaf": null,
+    "max_samples": 0.343144197197656
+  },
+  "catboost": {
+    "p50": {
+      "iterations": 1029,
+      "learning_rate": 0.013609315675910083,
+      "depth": 6,
+      "l2_leaf_reg": 0.30376763727642625,
+      "subsample": 0.5024592783869104,
+      "rsm": 0.517020439081151,
+      "random_strength": 3.816348461527001,
+      "bootstrap_type": "Bernoulli"
+    },
+    "p10": {
+      "iterations": 621,
+      "learning_rate": 0.015950422396489576,
+      "depth": 5,
+      "l2_leaf_reg": 0.8366342801595522,
+      "subsample": 0.7476269225445967,
+      "rsm": 0.43807368296919574,
+      "random_strength": 4.226643506779645,
+      "bootstrap_type": "Bernoulli"
+    },
+    "p90": {
+      "iterations": 336,
+      "learning_rate": 0.024771710727898952,
+      "depth": 4,
+      "l2_leaf_reg": 8.901997877258857,
+      "subsample": 0.6691760287990363,
+      "rsm": 0.688753307391511,
+      "random_strength": 1.6512362910374718,
+      "bootstrap_type": "Bernoulli"
+    },
+    "spike_high": {
+      "iterations": 247,
+      "learning_rate": 0.019695914813680236,
+      "depth": 8,
+      "l2_leaf_reg": 36.52959069614227,
+      "subsample": 0.5650070187287478,
+      "rsm": 0.9264623588199803,
+      "random_strength": 0.09214206273422804,
+      "bootstrap_type": "Bernoulli"
+    },
+    "spike_low": {
+      "iterations": 230,
+      "learning_rate": 0.012982485087605059,
+      "depth": 4,
+      "l2_leaf_reg": 17.66916344643917,
+      "subsample": 0.8890783754749252,
+      "rsm": 0.9090085037727733,
+      "random_strength": 4.89309171116382,
+      "bootstrap_type": "Bernoulli"
+    },
+    "dir": {
+      "iterations": 500,
+      "learning_rate": 0.017243095771007792,
+      "depth": 8,
+      "l2_leaf_reg": 0.35222740336504005,
+      "subsample": 0.619762105593908,
+      "rsm": 0.5416679538589688,
+      "random_strength": 2.9284708413720413,
+      "bootstrap_type": "Bernoulli"
+    }
+  }
+}

@@ -1,0 +1,261 @@
+diff --git a/build_dataset.py b/build_dataset.py
+index c19ab2e..0ad51da 100644
+--- a/build_dataset.py
++++ b/build_dataset.py
+@@ -59,7 +59,8 @@ TZ = ZoneInfo("Europe/Helsinki")
+ UTC = timezone.utc
+ QUARTER = timedelta(minutes=15)
+ 
+-# Specification v5.1 chapter 2
++# Specification v5.1 chapter 2. DATA_PERIOD_START is the default of --data-period-start: the
++# extended history (data_ext/) starts on 12 Jun 2024 and sets it from the command line.
+ DATA_PERIOD_START = datetime(2026, 5, 31, 21, 0, tzinfo=UTC)
+ DATA_PERIOD_LAST = datetime(2026, 11, 2, 6, 45, tzinfo=UTC)  # start of the last quarter-hour
+ VALIDATION_PERIOD = (datetime(2026, 9, 6, 21, 0, tzinfo=UTC), datetime(2026, 10, 4, 20, 45, tzinfo=UTC))
+@@ -168,6 +169,52 @@ ENTSOE_SERIES = [
+     _capacity("FI", "EE"), _capacity("EE", "FI"),
+ ]
+ 
++# Extra Fingrid datasets for the extended history (--catalogue extended): the inputs of the
++# imbalance price formula that the starter package lacks (imbalance/pricing.py), and the
++# pre-March-2025 mFRR volume series. Units are as given in the Fingrid metadata.
++EXTENDED_FINGRID_SERIES = [
++    FingridSeries("fi_afrr_up_vol_marginal", 349, "MW", "aFRR activation volume with marginal price, up (bidding zone FI)"),
++    FingridSeries("fi_afrr_down_vol_marginal", 350, "MW", "aFRR activation volume with marginal price, down (bidding zone FI)"),
++    FingridSeries("fi_afrr_up_vol_local", 354, "MW", "aFRR activation volume, local selection, up"),
++    FingridSeries("fi_afrr_down_vol_local", 353, "MW", "aFRR activation volume, local selection, down"),
++    FingridSeries("fi_afrr_up_price_local", 352, "EUR/MWh", "aFRR VWA price, local selection, up"),
++    FingridSeries("fi_afrr_down_price_local", 351, "EUR/MWh", "aFRR VWA price, local selection, down"),
++    FingridSeries("fi_afrr_up_avoided", 407, "MW", "avoided aFRR activation up (netted demand, PICASSO)"),
++    FingridSeries("fi_afrr_down_avoided", 408, "MW", "avoided aFRR activation down (netted demand, PICASSO)"),
++    FingridSeries("fi_picasso_status", 411, "share", "share of the quarter-hour Fingrid was connected to PICASSO"),
++    FingridSeries("fi_lfc_status", 412, "share", "share of the quarter-hour the local frequency controller was on"),
++    FingridSeries("fi_mfrr_up_sa", 385, "MW", "activated mFRR balancing regulation, SA, up"),
++    FingridSeries("fi_mfrr_down_sa", 386, "MW", "activated mFRR balancing regulation, SA, down"),
++    FingridSeries("fi_mfrr_up_da", 390, "MW", "activated mFRR balancing regulation, DA, up (max power of the quarter)"),
++    FingridSeries("fi_mfrr_down_da", 389, "MW", "activated mFRR balancing regulation, DA, down (max power of the quarter)"),
++    FingridSeries("fi_mfrr_special_up", 391, "MW", "activated mFRR special regulation, up (max power of the quarter)"),
++    FingridSeries("fi_mfrr_special_down", 392, "MW", "activated mFRR special regulation, down (max power of the quarter)"),
++    FingridSeries("fi_mfrr_special_up_sa", 393, "MW", "activated mFRR special regulation, SA, up"),
++    FingridSeries("fi_mfrr_special_down_sa", 394, "MW", "activated mFRR special regulation, SA, down"),
++    FingridSeries("fi_mfrr_special_up_da", 387, "MW", "activated mFRR special regulation, DA, up (max power of the quarter)"),
++    FingridSeries("fi_mfrr_special_down_da", 388, "MW", "activated mFRR special regulation, DA, down (max power of the quarter)"),
++    FingridSeries("fi_mfrr_need", 377, "MW", "Fingrid's estimate of the mFRR energy need"),
++    FingridSeries("fi_mfrr_net_export", 381, "MW", "net export (+) / import (-) of mFRR energy"),
++    FingridSeries("fi_mfrr_sa_price", 400, "EUR/MWh", "mFRR scheduled activation price, real-time"),
++    FingridSeries("fi_mfrr_da_up_price", 401, "EUR/MWh", "mFRR direct activation price up, real-time"),
++    FingridSeries("fi_mfrr_da_down_price", 402, "EUR/MWh", "mFRR direct activation price down, real-time"),
++    FingridSeries("fi_mfrr_up_ordered_old", 34, "MWh/h", "ordered up-regulations, hourly; ended 4 Mar 2025"),
++    FingridSeries("fi_mfrr_down_ordered_old", 33, "MWh/h", "ordered down-regulations, hourly, negative; ended 4 Mar 2025"),
++    FingridSeries("fi_mfrr_up_power_old", 253, "MW", "activated up-regulation power at the end of the quarter-hour"),
++    FingridSeries("fi_mfrr_down_power_old", 252, "MW", "activated down-regulation power at the end of the quarter-hour"),
++    FingridSeries("fi_special_up_old", 119, "MWh/h", "special regulation, up, hourly"),
++    FingridSeries("fi_special_down_old", 118, "MWh/h", "special regulation, down, hourly"),
++]
++
++# Day-ahead price of bidding zone FI (SDAC, the same coupled price Nord Pool publishes). Not on ENTSO-E's
++# list of data available for free re-use: written to its own file (spot_entsoe.csv), fetched at run time
++# with the user's token and never published (source "entsoe_spot").
++ENTSOE_SPOT = EntsoeSeries(
++    key="day_ahead_price_FI", article="12.1.d", area="FI",
++    params={"documentType": "A44", "in_Domain": ENTSOE_EIC["FI"], "out_Domain": ENTSOE_EIC["FI"]},
++    unit="EUR/MWh", series_id="fi_spot_price",
++    note="day-ahead price FI (A44); hourly until 30 Sep 2025, 15 min from 1 Oct 2025; not for re-use")
++
+ IMBALANCE_CATEGORY_SUFFIX = {"A04": "long", "A05": "short"}
+ 
+ CALENDAR_SERIES = {
+@@ -486,10 +533,18 @@ def find_rule(rules: list[AvailabilityRule], source: str, dataset_key: str | Non
+     raise BuildError(f"availability.csv has no rule for source '{source}', dataset '{dataset_key}'.")
+ 
+ 
++_PERIOD_START_OVERRIDE: list[datetime] = []
++
++
++def _period_start() -> datetime:
++    """Data period start of this run (--data-period-start); calendar rows are usable from it."""
++    return _PERIOD_START_OVERRIDE[-1] if _PERIOD_START_OVERRIDE else DATA_PERIOD_START
++
++
+ def compute_first_usable(timestamps: pd.Series, period_end: pd.Series, rule: AvailabilityRule) -> pd.Series:
+     """Specification 6.2: publication time, rounded up to the next full hour (same if already full)."""
+     if rule.availability_type == "always":
+-        return pd.Series(pd.Timestamp(DATA_PERIOD_START), index=timestamps.index)
++        return pd.Series(pd.Timestamp(_period_start()), index=timestamps.index)
+     if rule.availability_type == "lag_after_period_end":
+         published = period_end + pd.Timedelta(minutes=rule.lag_minutes)
+         return published.dt.ceil("h")
+@@ -558,6 +613,36 @@ def expand_fingrid_rows(series: FingridSeries, raw_rows: list[dict]) -> SeriesFr
+     durations: dict[int, int] = {}
+     nulls = 0
+     bad = 0
++    # Overlapping rows. (1) Fingrid 319/244/106/369, 14-18 Mar 2025, the week before quarter-hour
++    # prices: an hourly row and quarter-hour rows for the same quarter-hours. Fingrid: "The data before
++    # 19.3.2025 is in hourly resolution", so a row covered by a longer row is dropped. (2) Fingrid
++    # 347/348, June 2024: a row starts every quarter-hour but each says it lasts 60 min. A row that does
++    # not start on a multiple of its own length (a 60-min row at 06:15) covers only its first
++    # quarter-hour; an aligned row covers the quarter-hours where no row as long or longer starts.
++    parsed = []
++    for item in raw_rows:
++        start = datetime.fromisoformat(item["startTime"].replace("Z", "+00:00"))
++        end = datetime.fromisoformat(item["endTime"].replace("Z", "+00:00"))
++        parsed.append((start, end, int((end - start).total_seconds() // 60), item.get("value")))
++    longest_start: dict[datetime, int] = {}
++    for start, _, minutes, value in parsed:
++        if value is not None:
++            longest_start[start] = max(minutes, longest_start.get(start, 0))
++
++    def quarters(start: datetime, minutes: int) -> list[datetime]:
++        aligned = minutes <= 60 and (start.minute % minutes == 0 if minutes < 60 else start.minute == 0)
++        if not aligned and minutes <= 60:
++            return [start]
++        qs = [start + k * QUARTER for k in range(max(minutes // 15, 1))]
++        return [qs[0]] + [q for q in qs[1:] if longest_start.get(q, 0) < minutes]
++
++    covered: dict[datetime, tuple[int, float]] = {}
++    for start, _, minutes, value in parsed:
++        if value is not None and minutes > 15 and minutes % 15 == 0:
++            for q in quarters(start, minutes):
++                if minutes > covered.get(q, (0, 0.0))[0]:
++                    covered[q] = (minutes, float(value))
++    overlapped, conflicts = 0, []
+     for item in raw_rows:
+         start = datetime.fromisoformat(item["startTime"].replace("Z", "+00:00"))
+         end = datetime.fromisoformat(item["endTime"].replace("Z", "+00:00"))
+@@ -570,12 +655,21 @@ def expand_fingrid_rows(series: FingridSeries, raw_rows: list[dict]) -> SeriesFr
+         if minutes <= 0 or minutes % 15 or start.minute % 15:
+             bad += 1
+             continue
+-        # A row longer than 15 min (e.g. hourly) is repeated for each quarter-hour, and
++        if start in covered and minutes < covered[start][0]:
++            overlapped += 1
++            if float(value) != covered[start][1]:
++                conflicts.append(f"{_iso_z(start)} {float(value)} (kept {covered[start][1]})")
++            continue
++        # A row longer than 15 min (e.g. hourly) is repeated for each quarter-hour it covers, and
+         # first_usable_origin_utc is computed from the end of the original period.
+-        for k in range(minutes // 15):
+-            frame.rows.append((start + k * QUARTER, float(value), end))
++        for q in quarters(start, minutes):
++            frame.rows.append((q, float(value), end))
+     frame.info = {"source_durations_min": durations, "null_values": nulls, "invalid_periods": bad,
+-                  "time_field": "startTime"}
++                  "time_field": "startTime", "rows_covered_by_longer_row": overlapped,
++                  "covered_rows_with_other_value": conflicts}
++    if overlapped:
++        warn(f"fingrid {series.dataset_id}: {overlapped} row(s) covered by a longer row were dropped"
++             + (f"; {len(conflicts)} had another value: {', '.join(conflicts)}" if conflicts else ""))
+     if bad:
+         warn(f"fingrid {series.dataset_id}: {bad} row(s) with a period that is not a multiple of 15 min skipped")
+     return frame
+@@ -1155,7 +1249,14 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
+     parser.add_argument("--cache-dir", type=Path, default=script_dir.parent / "data_cache",
+                         help="raw API response cache (default: ../data_cache)")
+     parser.add_argument("--sources", default="fingrid,entsoe,calendar",
+-                        help="comma separated sources to include (default: %(default)s)")
++                        help="comma separated sources to include (default: %(default)s); entsoe_spot = ENTSO-E "
++                             "day-ahead price FI, written to spot_entsoe.csv instead of the Nord Pool file")
++    parser.add_argument("--data-period-start", metavar="START",
++                        help="start of the data period (calendar rows are usable from it); default "
++                             f"{fmt_utc(DATA_PERIOD_START)}. The extended history uses 2024-06-12.")
++    parser.add_argument("--catalogue", choices=["package", "extended"], default="package",
++                        help="package = the starter package series; extended = also the imbalance price "
++                             "formula inputs (default: %(default)s)")
+     parser.add_argument("--refresh", action="store_true", help="ignore the cache and fetch everything again")
+     parser.add_argument("--version", action="version", version=f"%(prog)s {SCRIPT_VERSION} (schema {SCHEMA_VERSION})")
+     args = parser.parse_args(argv)
+@@ -1170,12 +1271,17 @@ def run(args: argparse.Namespace) -> int:
+     end_excl = parse_window_arg(args.end, is_end=True)
+     if end_excl <= start:
+         raise BuildError("--end must be after --start.")
+-    if start < DATA_PERIOD_START or end_excl - QUARTER > DATA_PERIOD_LAST:
+-        warn("the window extends outside the data period of the specification (2026-05-31T21:00Z..2026-11-02T06:45Z).")
++    if args.data_period_start:
++        _PERIOD_START_OVERRIDE.append(parse_window_arg(args.data_period_start, is_end=False))
++    if start < _period_start() or end_excl - QUARTER > DATA_PERIOD_LAST:
++        warn(f"the window extends outside the data period ({fmt_utc(_period_start())}..2026-11-02T06:45Z).")
++    fingrid_series = FINGRID_SERIES + (EXTENDED_FINGRID_SERIES if args.catalogue == "extended" else [])
+     sources = {s.strip() for s in args.sources.split(",") if s.strip()}
+-    unknown = sources - {"fingrid", "entsoe", "calendar"}
++    unknown = sources - {"fingrid", "entsoe", "calendar", "entsoe_spot"}
+     if unknown:
+         raise BuildError(f"unknown source(s) in --sources: {', '.join(sorted(unknown))}")
++    if "entsoe_spot" in sources and args.spot_file:
++        raise BuildError("give either --spot-file (Nord Pool) or the source entsoe_spot, not both.")
+ 
+     window_index = quarter_index(start, end_excl)
+     chunks = local_month_chunks(start, end_excl)
+@@ -1199,7 +1305,7 @@ def run(args: argparse.Namespace) -> int:
+ 
+     if "fingrid" in sources:
+         log("Fingrid:")
+-        for series in FINGRID_SERIES:
++        for series in fingrid_series:
+             raw_rows = fetch_fingrid(series, chunks, client_factory, keys, cache)
+             frame = expand_fingrid_rows(series, raw_rows)
+             df, dup = frame_to_rows(frame, window_index, rules)
+@@ -1224,7 +1330,7 @@ def run(args: argparse.Namespace) -> int:
+ 
+     if "calendar" in sources:
+         cal = build_calendar(window_index)
+-        cal["first_usable_origin_utc"] = pd.Timestamp(DATA_PERIOD_START)  # calendar is known in advance (D17)
++        cal["first_usable_origin_utc"] = pd.Timestamp(_period_start())  # calendar is known in advance (D17)
+         cal = cal[OUTPUT_COLUMNS]
+         long_parts.append(cal)
+         for series_id in CALENDAR_SERIES:
+@@ -1232,10 +1338,19 @@ def run(args: argparse.Namespace) -> int:
+             quality.append(quality_row(series_id, "calendar", "", part, window_index, 0,
+                                        "known in advance: first_usable_origin_utc = data period start (D17)"))
+ 
+-    # Spot (Nord Pool, D3): separate file
++    # Spot: ENTSO-E day-ahead price (source entsoe_spot) or Nord Pool file (D3); always a separate file
+     spot_df = None
+     spot_text = "not given"
+-    if args.spot_file:
++    spot_name = "spot_nordpool.csv"
++    if "entsoe_spot" in sources:
++        log("ENTSO-E day-ahead price FI:")
++        (frame,) = fetch_entsoe(ENTSOE_SPOT, chunks, client_factory, keys, cache)
++        spot_df, dup = frame_to_rows(frame, window_index, rules)
++        spot_name = "spot_entsoe.csv"
++        spot_text = f"ENTSO-E A44 bidding zone FI ({json.dumps(frame.info, default=str)})"
++        quality.append(quality_row("fi_spot_price", "entsoe", frame.dataset_id, spot_df, window_index,
++                                   dup["duplicates_removed_identical"], frame.note, frame.info))
++    elif args.spot_file:
+         spot_raw, spot_info = read_spot_file(args.spot_file, args.spot_separator, args.spot_decimal,
+                                              args.spot_timestamp_position)
+         spot_raw = spot_raw[spot_raw["timestamp_utc"].isin(window_index)].reset_index(drop=True)
+@@ -1250,17 +1365,18 @@ def run(args: argparse.Namespace) -> int:
+         quality.append(quality_row("fi_spot_price", "nordpool", "", spot_df, window_index, 0,
+                                    "Nord Pool, Turku Energia licence (D3)", spot_info))
+     else:
+-        warn("--spot-file not given: spot_nordpool.csv is not written and spot_price in the actuals files is "
+-             "empty. Exceptional price metrics cannot be scored without it (D5).")
++        warn("no spot source (--spot-file or entsoe_spot): no spot file is written and spot_price in the actuals "
++             "files is empty. Exceptional price metrics cannot be scored without it (D5).")
+ 
+     # Output
+     args.out_dir.mkdir(parents=True, exist_ok=True)
+     inputs = pd.concat(long_parts, ignore_index=True) if long_parts else pd.DataFrame(columns=OUTPUT_COLUMNS)
+     inputs = inputs.sort_values(["series_id", "timestamp_utc"]).reset_index(drop=True)
+-    write_parquet(inputs, args.out_dir / "inputs.parquet")
+-    _write_csv(_format_long(inputs), args.out_dir / "inputs.csv")
++    if long_parts:          # a spot-only run (--sources entsoe_spot) writes no inputs files
++        write_parquet(inputs, args.out_dir / "inputs.parquet")
++        _write_csv(_format_long(inputs), args.out_dir / "inputs.csv")
+     if spot_df is not None:
+-        _write_csv(_format_long(spot_df), args.out_dir / "spot_nordpool.csv")
++        _write_csv(_format_long(spot_df), args.out_dir / spot_name)
+ 
+     imbalance = by_series.get("fi_imbalance_price")
+     direction = by_series.get("fi_mfrr_direction")
+@@ -1272,7 +1388,8 @@ def run(args: argparse.Namespace) -> int:
+     write_actuals(actuals_test, args.organizer_dir / "actuals_test.csv")
+     for name, df in (("actuals_validation.csv", actuals_val), ("actuals_test.csv", actuals_test)):
+         quality.append({
+-            "series_id": name, "source": "actuals", "dataset_id": "319;369;nordpool",
++            "series_id": name, "source": "actuals",
++            "dataset_id": "319;369;" + ("entsoe" if spot_name == "spot_entsoe.csv" else "nordpool"),
+             "rows": len(df), "expected_rows": len(df),
+             "missing_rows": int(df["imbalance_price"].isna().sum()), "gap_runs": "", "longest_gap_quarters": "",
+             "first_missing_utc": "", "duplicates_removed_identical": int(df["delivery_start_utc"].duplicated().sum()),

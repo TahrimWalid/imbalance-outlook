@@ -1,0 +1,24 @@
+# keys
+.env
+*.env
+.secrets/
+# data: never committed (Fingrid / ENTSO-E data, starter package)
+/data
+/data_ext
+*.csv
+*.parquet
+*.zip
+# run outputs, including the real-spot dashboard (ENTSO-E day-ahead prices: own use only)
+/runs
+/baseline_output
+# starter package files (not redistributed: get them from the challenge)
+build_dataset.py
+score.py
+validate_submission.py
+make_templates.py
+baseline.ipynb
+availability.csv
+# python
+__pycache__/
+/.venv
+*.egg-info/
