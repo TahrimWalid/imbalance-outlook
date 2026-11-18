@@ -272,14 +272,14 @@ def variants_chart(variants: list[str]):
 
 # 6. the unseen test month: forecast one hour ahead against Fingrid's published price ------------------
 
-def test_week(variant: str = "B"):
+def test_week(variant: str = "B", days: int = 7, name: str = "06_test_week.png"):
     f = pd.read_csv(ROOT / "runs" / "variants" / variant / "test_full" / "combined_v3" / "forecast_backtest.csv",
                     parse_dates=["delivery_start_utc"])
     f = f[f["step"] <= 4].set_index("delivery_start_utc")
     a = pd.read_csv(ROOT / "data" / "actuals_test.csv", usecols=["delivery_start_utc", "imbalance_price"],
                     parse_dates=["delivery_start_utc"]).set_index("delivery_start_utc")
     t0 = pd.Timestamp("2026-10-05", tz=TZ).tz_convert("UTC")      # first full week, fixed in advance
-    g = pd.date_range(t0, t0 + pd.Timedelta(days=7) - pd.Timedelta(minutes=15), freq="15min")
+    g = pd.date_range(t0, t0 + pd.Timedelta(days=days) - pd.Timedelta(minutes=15), freq="15min")
     f, a = f.reindex(g), a.reindex(g)
     t = g.tz_convert(TZ)
     top = 300
@@ -293,18 +293,19 @@ def test_week(variant: str = "B"):
         ax.text(0.995, 0.97, f"▲ actual above €{top}: {int(over.sum())} quarter-hours (highest €{a['imbalance_price'].max():,.0f})",
                 transform=ax.transAxes, ha="right", va="top", fontsize=8.5, color=INK2)
     ax.set_ylim(top=top)
-    ax.xaxis.set_major_locator(mdates.DayLocator(tz=TZ))
+    ax.xaxis.set_major_locator(mdates.DayLocator(tz=TZ) if days <= 7 else mdates.WeekdayLocator(byweekday=0, tz=TZ))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %d %b", tz=TZ))
     ax.set_ylabel("€/MWh", color=INK2)
     ax.legend(loc="lower left", bbox_to_anchor=(0, 1.0), ncol=3, frameon=False, fontsize=9)
     e = (a["imbalance_price"] - f["p50"]).abs()
     inside = ((a["imbalance_price"] >= f["p10"]) & (a["imbalance_price"] <= f["p90"])).mean()
     header(fig, "Unseen test month: forecast against what actually happened",
-           f"First week of the test month (5–11 Oct 2026, chosen in advance), never used for any choice. "
-           f"Average miss €{e.mean():.0f}/MWh, half within €{e.median():.0f}; {inside:.0%} of prices inside the range.")
+           (f"First week of the test month (5–11 Oct 2026, chosen in advance), never used for any choice. " if days <= 7 else
+            f"The whole test month, 5 Oct – 1 Nov 2026, never used for any choice. Forecast made 1 hour ahead. ")
+           + f"Average miss €{e.mean():.0f}/MWh, half within €{e.median():.0f}; {inside:.0%} of prices inside the range.")
     credit(fig)
     fig.tight_layout(rect=(0, 0.03, 1, 0.89))
-    return save(fig, "06_test_week.png")
+    return save(fig, name)
 
 def main():
     ap = argparse.ArgumentParser()
@@ -325,6 +326,7 @@ def main():
             sim_gif(d)
     if "testweek" in want:
         test_week(a.variant or "B")
+        test_week(a.variant or "B", 28, "07_test_month.png")
     if a.compare:
         variants_chart(a.compare)
 

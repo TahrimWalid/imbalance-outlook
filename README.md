@@ -147,7 +147,9 @@ In plain terms, for the forecast made one hour ahead:
 
 Over the full 10-hour horizon: 85% inside the range, direction right 71%, 63% of spikes flagged.
 
-![Unseen test month](docs/img/06_test_week.png)
+![The whole test month](docs/img/07_test_month.png)
+
+![First test week, close-up](docs/img/06_test_week.png)
 
 ## 5. From forecast to operator tool
 
